@@ -20,20 +20,35 @@ BUTTON LAYOUT (verified from fight.c:826 and :2155):
     3 Nick       7 Evade           5 Force Field
     4 Spell      8 Use Ring        8 Transform
 
-Controls: drag to move, right-click to close, F9 hide/show.
+Controls: drag to move, right-click to close, F9 hide/show, F8 auto-press on/off.
+
+Auto-press uses the saved button alignment from highlight.cfg (created by
+highlight.py). On Windows it clicks the real game button at the center of the
+slot that is lit; for spells it clicks Spell, then the spell submenu button,
+and types the bolt mana amount when needed.
 """
 
 import tkinter as tk
 from tkinter import font as tkfont
 import json
+import os
 import queue
+import sys
 import threading
+import time
 import urllib.request
 import urllib.error
 
 POLL_URL = "http://127.0.0.1:8420/state"
 POLL_MS = 400
 PAINT_MS = 100
+CFG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "highlight.cfg")
+AUTOPRESS_DELAY = 0.35
+AUTOPRESS_COOLDOWN = 1.0
+
+# Same default game-button geometry used by highlight.py. Save alignment there
+# first if your client window is not in this exact spot.
+DEFAULT_BUTTON_GEOMETRY = dict(x=17, y=449, w=98, h=40, gap=10)
 
 BG    = "#16130e"
 PANEL = "#211c14"
@@ -94,12 +109,88 @@ class ButtonOverlay:
         self.alive = True
         self._hidden = False
         self._sig = None
+        self._last_press_at = 0
+        self._autopress = True
+        self._button_geometry = self._load_button_geometry()
         self._flash = 0
 
         self._build()
         self._bind()
         threading.Thread(target=self._poll_loop, daemon=True).start()
         self._paint()
+
+
+    def _load_button_geometry(self):
+        g = dict(DEFAULT_BUTTON_GEOMETRY)
+        try:
+            with open(CFG) as f:
+                g.update(json.load(f))
+        except (OSError, ValueError):
+            pass
+        return g
+
+    def _slot_center(self, slot):
+        g = self._button_geometry
+        x = g["x"] + (slot - 1) * (g["w"] + g["gap"]) + g["w"] / 2
+        y = g["y"] + g["h"] / 2
+        return int(x), int(y)
+
+    def _click_slot(self, slot):
+        if not sys.platform.startswith("win"):
+            return False
+        try:
+            import ctypes
+            x, y = self._slot_center(slot)
+            ctypes.windll.user32.SetCursorPos(x, y)
+            ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
+            ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
+            return True
+        except Exception:
+            return False
+
+    def _type_text(self, text):
+        if not sys.platform.startswith("win"):
+            return False
+        try:
+            import ctypes
+            for ch in str(text):
+                vk = ctypes.windll.user32.VkKeyScanW(ord(ch)) & 0xff
+                ctypes.windll.user32.keybd_event(vk, 0, 0, 0)
+                ctypes.windll.user32.keybd_event(vk, 0, 0x0002, 0)
+                time.sleep(0.02)
+            return True
+        except Exception:
+            return False
+
+    def _toggle_autopress(self):
+        self._autopress = not self._autopress
+        self.auto_lbl.configure(text="AUTO ON" if self._autopress else "AUTO OFF",
+                                fg=GREEN if self._autopress else RED)
+
+    def _autopress_move(self, move, mv, num, sub):
+        if not self._autopress:
+            return
+        sig = (self.data.get("fight", {}).get("name"), move, mv.get("arg"))
+        now = time.monotonic()
+        if sig == self._sig or now - self._last_press_at < AUTOPRESS_COOLDOWN:
+            return
+        self._sig = sig
+        self._last_press_at = now
+
+        def worker():
+            if sub is None:
+                self._click_slot(num)
+                return
+            self._click_slot(num)
+            time.sleep(AUTOPRESS_DELAY)
+            sub_label, sub_num = sub
+            if sub_num:
+                self._click_slot(sub_num)
+            if move == "bolt" and mv.get("arg"):
+                time.sleep(AUTOPRESS_DELAY)
+                self._type_text(int(mv["arg"]))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _build(self):
         outer = tk.Frame(self.root, bg=LINE)
@@ -112,7 +203,10 @@ class ButtonOverlay:
         self.bar.pack_propagate(False)
         tk.Label(self.bar, text="PRESS THIS", bg="#0f0d09", fg=GREEN,
                  font=self.f_tiny).pack(side="left", padx=8)
-        tk.Label(self.bar, text="F9 hide", bg="#0f0d09", fg=DIM,
+        self.auto_lbl = tk.Label(self.bar, text="AUTO ON", bg="#0f0d09", fg=GREEN,
+                                 font=self.f_tiny)
+        self.auto_lbl.pack(side="right", padx=8)
+        tk.Label(self.bar, text="F8 auto  F9 hide", bg="#0f0d09", fg=DIM,
                  font=self.f_tiny).pack(side="right", padx=8)
 
         # top hint line: the move + bolt amount / sub-steps
@@ -147,6 +241,7 @@ class ButtonOverlay:
             w.bind("<Button-1>", self._grab)
             w.bind("<B1-Motion>", self._drag)
         self.root.bind("<F9>", lambda e: self._toggle())
+        self.root.bind("<F8>", lambda e: self._toggle_autopress())
         self.root.bind("<Escape>", lambda e: self._quit())
         self.root.bind("<Button-3>", self._menu)
 
@@ -232,6 +327,7 @@ class ButtonOverlay:
             self._reset_cells()
             self.hint.configure(text="No monster", fg=DIM)
             self.sub.configure(text="")
+            self._sig = None
             return
 
         mv = f["moves"][0]
@@ -249,6 +345,8 @@ class ButtonOverlay:
         label, num, sub = info
 
         # spell moves: two-step. Show step 1 (Spell) then the sub-button.
+        self._autopress_move(move, mv, num, sub)
+
         if sub is not None:
             self._layout(False)
             # flash the Spell button
