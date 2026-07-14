@@ -22,16 +22,15 @@ BUTTON LAYOUT (verified from fight.c:826 and :2155):
 
 Controls: drag to move, right-click to close, F9 hide/show, F8 auto-press on/off.
 
-Auto-press uses the saved button alignment from highlight.cfg (created by
-highlight.py). On Windows it clicks the real game button at the center of the
-slot that is lit; for spells it clicks Spell, then the spell submenu button,
-and types the bolt mana amount when needed.
+Auto-press sends the matching number key to the active game window instead of
+clicking the overlay or the game button with the mouse. For spells it presses
+4 for Spell, then the spell submenu number, and types the bolt mana amount
+when needed.
 """
 
 import tkinter as tk
 from tkinter import font as tkfont
 import json
-import os
 import queue
 import sys
 import threading
@@ -42,13 +41,11 @@ import urllib.error
 POLL_URL = "http://127.0.0.1:8420/state"
 POLL_MS = 400
 PAINT_MS = 100
-CFG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "highlight.cfg")
 AUTOPRESS_DELAY = 0.35
 AUTOPRESS_COOLDOWN = 1.0
 
-# Same default game-button geometry used by highlight.py. Save alignment there
-# first if your client window is not in this exact spot.
-DEFAULT_BUTTON_GEOMETRY = dict(x=17, y=449, w=98, h=40, gap=10)
+# Number-key virtual-key codes are used for auto-pressing so the mouse is never
+# moved and the overlay's own buttons are never clicked.
 
 BG    = "#16130e"
 PANEL = "#211c14"
@@ -111,7 +108,6 @@ class ButtonOverlay:
         self._sig = None
         self._last_press_at = 0
         self._autopress = True
-        self._button_geometry = self._load_button_geometry()
         self._flash = 0
 
         self._build()
@@ -120,30 +116,14 @@ class ButtonOverlay:
         self._paint()
 
 
-    def _load_button_geometry(self):
-        g = dict(DEFAULT_BUTTON_GEOMETRY)
-        try:
-            with open(CFG) as f:
-                g.update(json.load(f))
-        except (OSError, ValueError):
-            pass
-        return g
-
-    def _slot_center(self, slot):
-        g = self._button_geometry
-        x = g["x"] + (slot - 1) * (g["w"] + g["gap"]) + g["w"] / 2
-        y = g["y"] + g["h"] / 2
-        return int(x), int(y)
-
-    def _click_slot(self, slot):
+    def _press_number_key(self, number):
         if not sys.platform.startswith("win"):
             return False
         try:
             import ctypes
-            x, y = self._slot_center(slot)
-            ctypes.windll.user32.SetCursorPos(x, y)
-            ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
-            ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
+            vk = ord(str(number))
+            ctypes.windll.user32.keybd_event(vk, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(vk, 0, 0x0002, 0)
             return True
         except Exception:
             return False
@@ -179,13 +159,13 @@ class ButtonOverlay:
 
         def worker():
             if sub is None:
-                self._click_slot(num)
+                self._press_number_key(num)
                 return
-            self._click_slot(num)
+            self._press_number_key(num)
             time.sleep(AUTOPRESS_DELAY)
             sub_label, sub_num = sub
             if sub_num:
-                self._click_slot(sub_num)
+                self._press_number_key(sub_num)
             if move == "bolt" and mv.get("arg"):
                 time.sleep(AUTOPRESS_DELAY)
                 self._type_text(int(mv["arg"]))
