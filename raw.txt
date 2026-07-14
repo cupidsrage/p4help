@@ -1,0 +1,5726 @@
+2
+5
+Anorc
+H -1
+11
+W e l c o m e   t o   P h a n t a s i a (vers. 5.1.0-beta, built Jan  4 2025)!
+11
+https://www.phantasia5.com
+11
+
+11
+Please register on our Phorums at https://www.phantasia5.com/phorums
+11
+
+11
+There is no ruler at this time.
+11
+The Valar is Coldheart
+11
+Highest commoner is: Anorc  Level:2
+11
+
+11
+Do you need to sign up for an account, or are you ready to log in?
+20
+Sign Up
+Log In
+
+New Pass
+
+
+Scoreboard
+Quit
+10
+22
+What is the name of your account?
+58
+25
+What is the password for account "Blake420"?
+11
+Last login at Mon Jul 13 04:31:57 2026 from 173-216-15-20-cabt.mid.dyn.suddenlink.net.
+40
+
+41
+0
+0
+Rohan
+49
+0
+48
+0
+1000
+50
+0
+51
+0
+59
+0
+60
+0
+61
+0
+52
+No
+54
+No
+11
+What do you wish to do?
+20
+New Char
+Load Char
+
+Characters
+Account
+
+Scoreboard
+Quit
+58
+10
+22
+What is the name of the character?
+30
+Anorc was killed by A Hydra.
+10
+25
+What is the password to "Andro"?
+6
+Anorc
+11
+Loading the character...
+10
+5
+Andro
+H -1
+40
+Andro
+41
+170
+176
+Rovanion
+49
+2
+42
+128
+128
+0
+45
+0
+43
+36
+36
+46
+0
+44
+35
+35
+47
+0
+48
+94
+1160
+50
+125
+51
+0
+59
+0
+60
+0
+61
+0
+52
+No
+53
+No
+54
+No
+55
+No
+56
+No
+57
+No
+62
+No
+11
+Last login from "173-216-15-20-cabt.mid.dyn.suddenlink.net" with account "Blake420" at Mon Jul 13 04:00:00 2026.
+11
+You are currently playing from "173-216-15-20-cabt.mid.dyn.suddenlink.net".
+11
+
+11
+Please refrain from language offensive to others on channel 1. If you must vent your frustrations verbally, go to another channel by using Info-->Channel -- The Game Wizards
+20
+More
+
+
+
+
+
+
+
+10
+30
+An existing player returns to the realm, Andro the Halfling.
+31
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack A Bogle. -  (Size: 2)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+58
+11
+You made it!
+11
+
+11
+You have earned 314 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+You are attacked by A Kobold. -  (Size: 2)
+11
+A Kobold hit you for 10 damage!
+42
+118
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 242 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+128
+128
+0
+48
+95
+1160
+11
+You have found a village.  Do you wish to pillage it?
+20
+
+
+
+
+
+Yes
+No
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack A Crebain. -  (Size: 2)
+11
+A Crebain hit you for 5 damage!
+42
+123
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 224 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Crebain's friend appears and attacks. -  (Size: 2)
+11
+A Crebain hit you for 1 damage!
+42
+122
+128
+0
+11
+A Crebain hit you for 2 damage!
+42
+120
+128
+0
+11
+A Crebain hit you for 5 damage!
+42
+115
+128
+0
+11
+A Crebain hit you for 1 damage!
+42
+114
+128
+0
+11
+A Crebain hit you for 4 damage!
+42
+110
+128
+0
+11
+A Crebain hit you for 5 damage!
+42
+105
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 224 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Crebain's friend appears and attacks. -  (Size: 2)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 224 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Crebain's friend appears and attacks. -  (Size: 2)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You got away!
+20
+More
+
+
+
+
+
+
+
+10
+41
+170
+177
+Rovanion
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+116
+128
+0
+48
+96
+1160
+11
+You have found some treasure.  Do you want to inspect it?
+20
+
+
+
+
+
+Yes
+No
+No to All
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+127
+128
+0
+48
+97
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+128
+128
+0
+48
+98
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+35
+45
+Andro the Halfling
+Location: (170, 177)
+
+Account: Blake420
+Network: <unavailable>
+Channel: 1
+
+Level: 2
+Experience: 10690
+Next Level At: 16200
+
+Energy: 128 (128 + 0 shield)
+Strength: 36 (36 + 0 sword)
+Quickness: 35 (35 + 0 quicksilver)
+Brains: 84
+Magic Level: 3
+Mana: 98
+Gender: Male
+Poison: 0.0000
+Sin: 0.0090
+Lives: 0
+
+Gold: 125
+Gems: 0
+Holy Water: 1
+Amulets: 0
+Charms: 0
+Tokens: 0
+Staves / Crowns: 0
+Virgin: No
+Blessing: No
+Palantir: No
+Ring: No
+Staff of dead Istari: No
+
+Buffs:
+None
+
+Cloaked: No
+Blind: No
+Age: 211
+Degenerated: 1
+Played For: 00:05:14
+Loaded On: Mon Jul 13 04:32:06 2026
+Created On: Mon Jul 13 04:00:00 2026
+35
+45
+Andro the Halfling
+Location: (170, 177)
+
+Account: Blake420
+Network: <unavailable>
+Channel: 1
+
+Level: 2
+Experience: 10690
+Next Level At: 16200
+
+Energy: 128 (128 + 0 shield)
+Strength: 36 (36 + 0 sword)
+Quickness: 35 (35 + 0 quicksilver)
+Brains: 84
+Magic Level: 3
+Mana: 98
+Gender: Male
+Poison: 0.0000
+Sin: 0.0090
+Lives: 0
+
+Gold: 125
+Gems: 0
+Holy Water: 1
+Amulets: 0
+Charms: 0
+Tokens: 0
+Staves / Crowns: 0
+Virgin: No
+Blessing: No
+Palantir: No
+Ring: No
+Staff of dead Istari: No
+
+Buffs:
+None
+
+Cloaked: No
+Blind: No
+Age: 211
+Degenerated: 1
+Played For: 00:05:14
+Loaded On: Mon Jul 13 04:32:06 2026
+Created On: Mon Jul 13 04:00:00 2026
+58
+10
+10
+11
+You find and attack A Ghillie Dhu. -  (Size: 2)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+58
+11
+You made it!
+11
+
+11
+You have earned 208 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack Modnar. -  (Size: 2)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 118 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+11
+You have found some treasure.  Do you want to inspect it?
+20
+
+
+
+
+
+Yes
+No
+No to All
+11
+You've found a scroll.  Will you read it?
+20
+
+
+
+
+
+Yes
+No
+
+11
+It tells you how to pick your next monster.
+20
+More
+
+
+
+
+
+
+
+22
+Which monster do you want [0-100]?
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+48
+99
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+5
+Anorc
+H -1
+58
+4
+10
+11
+You are attacked by A Ghillie Dhu. -  (Size: 2)
+11
+Your holy water killed it!
+20
+More
+
+
+
+
+
+
+
+58
+30
+A new player appears in the realm, Anorc the Halfling.
+2
+5
+Anorc
+H -1
+11
+W e l c o m e   t o   P h a n t a s i a (vers. 5.1.0-beta, built Jan  4 2025)!
+11
+https://www.phantasia5.com
+11
+
+11
+Please register on our Phorums at https://www.phantasia5.com/phorums
+11
+
+11
+There is no ruler at this time.
+11
+The Valar is Coldheart
+11
+Highest commoner is: Anorc  Level:1
+11
+
+11
+Do you need to sign up for an account, or are you ready to log in?
+20
+Sign Up
+Log In
+
+New Pass
+
+
+Scoreboard
+Quit
+10
+22
+What is the name of your account?
+25
+What is the password for account "Blake420"?
+11
+Last login at Mon Jul 13 04:39:02 2026 from 173-216-15-20-cabt.mid.dyn.suddenlink.net.
+40
+
+41
+0
+0
+Rohan
+49
+0
+48
+0
+1000
+50
+0
+51
+0
+59
+0
+60
+0
+61
+0
+52
+No
+54
+No
+11
+What do you wish to do?
+20
+New Char
+Load Char
+
+Characters
+Account
+
+Scoreboard
+Quit
+10
+22
+What is the name of the character?
+10
+25
+What is the password to "Andro"?
+58
+11
+Loading the character...
+10
+5
+Andro
+H -1
+40
+Andro
+41
+170
+177
+Rovanion
+49
+2
+42
+128
+128
+0
+45
+0
+43
+36
+36
+46
+0
+44
+35
+35
+47
+0
+48
+99
+1160
+50
+125
+51
+0
+59
+0
+60
+0
+61
+0
+52
+No
+53
+No
+54
+No
+55
+No
+56
+No
+57
+No
+62
+No
+11
+Last login from "173-216-15-20-cabt.mid.dyn.suddenlink.net" with account "Blake420" at Mon Jul 13 04:32:06 2026.
+11
+You are currently playing from "173-216-15-20-cabt.mid.dyn.suddenlink.net".
+11
+
+11
+Please report any errors, oversights or possible bugs on the Phorums so we can address the issue. -- The Game Wizards
+20
+More
+
+
+
+
+
+
+
+10
+30
+An existing player returns to the realm, Andro the Halfling.
+31
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+35
+45
+Andro the Halfling
+Location: (170, 177)
+
+Account: Blake420
+Network: <unavailable>
+Channel: 1
+
+Level: 2
+Experience: 11224
+Next Level At: 16200
+
+Energy: 128 (128 + 0 shield)
+Strength: 36 (36 + 0 sword)
+Quickness: 35 (35 + 0 quicksilver)
+Brains: 84
+Magic Level: 3
+Mana: 99
+Gender: Male
+Poison: 0.0000
+Sin: 0.0110
+Lives: 0
+
+Gold: 125
+Gems: 0
+Holy Water: 0
+Amulets: 0
+Charms: 0
+Tokens: 0
+Staves / Crowns: 0
+Virgin: No
+Blessing: No
+Palantir: No
+Ring: No
+Staff of dead Istari: No
+
+Buffs:
+None
+
+Cloaked: No
+Blind: No
+Age: 217
+Degenerated: 1
+Played For: 00:09:39
+Loaded On: Mon Jul 13 04:39:16 2026
+Created On: Mon Jul 13 04:00:00 2026
+35
+45
+Andro the Halfling
+Location: (170, 177)
+
+Account: Blake420
+Network: <unavailable>
+Channel: 1
+
+Level: 2
+Experience: 11224
+Next Level At: 16200
+
+Energy: 128 (128 + 0 shield)
+Strength: 36 (36 + 0 sword)
+Quickness: 35 (35 + 0 quicksilver)
+Brains: 84
+Magic Level: 3
+Mana: 99
+Gender: Male
+Poison: 0.0000
+Sin: 0.0110
+Lives: 0
+
+Gold: 125
+Gems: 0
+Holy Water: 0
+Amulets: 0
+Charms: 0
+Tokens: 0
+Staves / Crowns: 0
+Virgin: No
+Blessing: No
+Palantir: No
+Ring: No
+Staff of dead Istari: No
+
+Buffs:
+None
+
+Cloaked: No
+Blind: No
+Age: 217
+Degenerated: 1
+Played For: 00:09:39
+Loaded On: Mon Jul 13 04:39:16 2026
+Created On: Mon Jul 13 04:00:00 2026
+10
+10
+11
+You find and attack A Centipede. -  (Size: 2)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+58
+11
+You made it!
+11
+
+11
+You have earned 66 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+41
+172
+179
+Rovanion
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+41
+174
+181
+The Iron Hills
+10
+11
+You are attacked by A Sprite. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+11
+A Sprite hit you for 4 damage!
+42
+124
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Sprite for 38 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+58
+11
+You hit A Sprite for 44 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Sprite for 56 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 396 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+11
+You have found some treasure.  Do you want to inspect it?
+20
+
+
+
+
+
+Yes
+No
+No to All
+11
+You've found a vial of holy water!
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+128
+128
+0
+48
+100
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+41
+176
+183
+The Iron Hills
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+58
+10
+41
+178
+185
+The Iron Hills
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+41
+180
+187
+The Iron Hills
+10
+11
+You are attacked by A Ghillie Dhu. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+30
+Anorc was killed by A Troll.
+11
+You blew it, Andro.
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+58
+11
+You hit A Ghillie Dhu for 42 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Ghillie Dhu for 35 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+6
+Anorc
+11
+You hit A Ghillie Dhu for 56 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 312 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+11
+You have found 51 gold pieces.
+11
+  Do you want to pick them up?
+20
+
+
+
+
+
+Yes
+No
+No to All
+50
+176
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+Your noise has spooked A Shrieker out of its hiding! -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 639 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+48
+101
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+35
+45
+Andro the Halfling
+Location: (180, 187)
+
+Account: Blake420
+Network: <unavailable>
+Channel: 1
+
+Level: 2
+Experience: 12637
+Next Level At: 16200
+
+Energy: 128 (128 + 0 shield)
+Strength: 36 (36 + 0 sword)
+Quickness: 35 (35 + 0 quicksilver)
+Brains: 84
+Magic Level: 3
+Mana: 101
+Gender: Male
+Poison: 0.0000
+Sin: 0.0130
+Lives: 0
+
+Gold: 176
+Gems: 0
+Holy Water: 1
+Amulets: 0
+Charms: 0
+Tokens: 0
+Staves / Crowns: 0
+Virgin: No
+Blessing: No
+Palantir: No
+Ring: No
+Staff of dead Istari: No
+
+Buffs:
+None
+
+Cloaked: No
+Blind: No
+Age: 230
+Degenerated: 1
+Played For: 00:10:56
+Loaded On: Mon Jul 13 04:39:16 2026
+Created On: Mon Jul 13 04:00:00 2026
+35
+45
+Andro the Halfling
+Location: (180, 187)
+
+Account: Blake420
+Network: <unavailable>
+Channel: 1
+
+Level: 2
+Experience: 12637
+Next Level At: 16200
+
+Energy: 128 (128 + 0 shield)
+Strength: 36 (36 + 0 sword)
+Quickness: 35 (35 + 0 quicksilver)
+Brains: 84
+Magic Level: 3
+Mana: 101
+Gender: Male
+Poison: 0.0000
+Sin: 0.0130
+Lives: 0
+
+Gold: 176
+Gems: 0
+Holy Water: 1
+Amulets: 0
+Charms: 0
+Tokens: 0
+Staves / Crowns: 0
+Virgin: No
+Blessing: No
+Palantir: No
+Ring: No
+Staff of dead Istari: No
+
+Buffs:
+None
+
+Cloaked: No
+Blind: No
+Age: 230
+Degenerated: 1
+Played For: 00:10:56
+Loaded On: Mon Jul 13 04:39:16 2026
+Created On: Mon Jul 13 04:00:00 2026
+10
+10
+11
+You find and attack A Centipede. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+58
+11
+You made it!
+11
+
+11
+You have earned 99 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Centipede's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 99 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Centipede's friend appears and attacks. -  (Size: 3)
+11
+A Centipede hit you for 5 damage!
+42
+123
+128
+0
+11
+A Centipede hit you for 3 damage!
+42
+120
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 99 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Centipede's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 99 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+128
+128
+0
+48
+102
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack Modnar. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+11
+Modnar hit you for 15 damage!
+42
+113
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit Modnar for 27 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit Modnar for 42 damage!
+11
+Modnar hit you for 21 damage!
+42
+92
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit Modnar for 20 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit Modnar for 37 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit Modnar for 58 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 254 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+You are attacked by Aureya Smurf. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+11
+Aureya Smurf hit you for 33 damage!
+42
+59
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit Aureya Smurf for 44 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit Aureya Smurf for 54 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit Aureya Smurf for 26 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit Aureya Smurf for 43 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit Aureya Smurf for 39 damage!
+11
+You finally manage to squish the Smurf.  Good work, Andro.
+11
+
+11
+You have earned 567 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+Aureya Smurf's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You got away!
+20
+More
+
+
+
+
+
+
+
+10
+41
+179
+188
+The Iron Hills
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+70
+128
+0
+48
+103
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+81
+128
+0
+48
+104
+1160
+10
+11
+You are attacked by A Spider. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You hit A Spider for 23 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You hit A Spider for 39 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You hit A Spider for 48 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 462 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Spider's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 462 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+92
+128
+0
+48
+105
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+103
+128
+0
+48
+106
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+114
+128
+0
+48
+107
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+125
+128
+0
+48
+108
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+128
+128
+0
+48
+109
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack A Serpent. -  (Size: 3)
+11
+A Serpent hit you for 13 damage!
+42
+115
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Serpent for 19 damage!
+11
+A Serpent hit you for 20 damage!
+42
+95
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Serpent for 52 damage!
+11
+A Serpent hit you for 13 damage!
+42
+82
+128
+0
+11
+A Serpent hit you for 12 damage!
+42
+70
+128
+0
+11
+A Serpent hit you for 2 damage!
+42
+68
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Serpent for 22 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 237 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+79
+128
+0
+48
+110
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+90
+128
+0
+48
+111
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+101
+128
+0
+48
+112
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+112
+128
+0
+48
+113
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+123
+128
+0
+48
+114
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+58
+10
+42
+128
+128
+0
+48
+115
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+48
+116
+1160
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+30
+Andro retires from the realm.
+6
+Andro
+32
+11
+Do you wish to continue playing?
+20
+
+
+
+
+
+Yes
+No
+
+5
+Anorc
+H -1
+30
+A new player appears in the realm, Anorc the Halfling.
+58
+30
+Anorc was killed by A Jello Blob.
+58
+4
+10
+3
+2
+5
+Anorc
+H -1
+11
+W e l c o m e   t o   P h a n t a s i a (vers. 5.1.0-beta, built Jan  4 2025)!
+11
+https://www.phantasia5.com
+11
+
+11
+Please register on our Phorums at https://www.phantasia5.com/phorums
+11
+
+11
+There is no ruler at this time.
+11
+The Valar is Coldheart
+11
+Highest commoner is: Anorc  Level:0
+11
+
+11
+Do you need to sign up for an account, or are you ready to log in?
+20
+Sign Up
+Log In
+
+New Pass
+
+
+Scoreboard
+Quit
+10
+22
+What is the name of your account?
+25
+What is the password for account "Blake420"?
+11
+Last login at Mon Jul 13 04:47:32 2026 from 173-216-15-20-cabt.mid.dyn.suddenlink.net.
+40
+
+41
+0
+0
+Rohan
+49
+0
+48
+0
+1000
+50
+0
+51
+0
+59
+0
+60
+0
+61
+0
+52
+No
+54
+No
+11
+What do you wish to do?
+20
+New Char
+Load Char
+
+Characters
+Account
+
+Scoreboard
+Quit
+58
+10
+22
+What is the name of the character?
+10
+25
+What is the password to "Andro"?
+11
+Loading the character...
+10
+5
+Andro
+H -1
+40
+Andro
+41
+179
+188
+The Iron Hills
+49
+2
+42
+128
+128
+0
+45
+0
+43
+36
+36
+46
+0
+44
+35
+35
+47
+0
+48
+116
+1160
+50
+176
+51
+0
+59
+0
+60
+0
+61
+0
+52
+No
+53
+No
+54
+No
+55
+No
+56
+No
+57
+No
+62
+No
+11
+Last login from "173-216-15-20-cabt.mid.dyn.suddenlink.net" with account "Blake420" at Mon Jul 13 04:39:16 2026.
+11
+You are currently playing from "173-216-15-20-cabt.mid.dyn.suddenlink.net".
+11
+
+11
+Please refrain from language offensive to others on channel 1. If you must vent your frustrations verbally, go to another channel by using Info-->Channel -- The Game Wizards
+20
+More
+
+
+
+
+
+
+
+10
+30
+An existing player returns to the realm, Andro the Halfling.
+31
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+35
+45
+Andro the Halfling
+Location: (179, 188)
+
+Account: Blake420
+Network: <unavailable>
+Channel: 1
+
+Level: 2
+Experience: 15015
+Next Level At: 16200
+
+Energy: 128 (128 + 0 shield)
+Strength: 36 (36 + 0 sword)
+Quickness: 35 (35 + 0 quicksilver)
+Brains: 84
+Magic Level: 3
+Mana: 116
+Gender: Male
+Poison: 0.0000
+Sin: 0.0160
+Lives: 0
+
+Gold: 176
+Gems: 0
+Holy Water: 1
+Amulets: 0
+Charms: 0
+Tokens: 0
+Staves / Crowns: 0
+Virgin: No
+Blessing: No
+Palantir: No
+Ring: No
+Staff of dead Istari: No
+
+Buffs:
+None
+
+Cloaked: No
+Blind: No
+Age: 257
+Degenerated: 1
+Played For: 00:12:10
+Loaded On: Mon Jul 13 04:47:43 2026
+Created On: Mon Jul 13 04:00:00 2026
+35
+45
+Andro the Halfling
+Location: (179, 188)
+
+Account: Blake420
+Network: <unavailable>
+Channel: 1
+
+Level: 2
+Experience: 15015
+Next Level At: 16200
+
+Energy: 128 (128 + 0 shield)
+Strength: 36 (36 + 0 sword)
+Quickness: 35 (35 + 0 quicksilver)
+Brains: 84
+Magic Level: 3
+Mana: 116
+Gender: Male
+Poison: 0.0000
+Sin: 0.0160
+Lives: 0
+
+Gold: 176
+Gems: 0
+Holy Water: 1
+Amulets: 0
+Charms: 0
+Tokens: 0
+Staves / Crowns: 0
+Virgin: No
+Blessing: No
+Palantir: No
+Ring: No
+Staff of dead Istari: No
+
+Buffs:
+None
+
+Cloaked: No
+Blind: No
+Age: 257
+Degenerated: 1
+Played For: 00:12:10
+Loaded On: Mon Jul 13 04:47:43 2026
+Created On: Mon Jul 13 04:00:00 2026
+10
+10
+11
+You find and attack A Cocodrill. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+58
+11
+You hit A Cocodrill for 29 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+58
+11
+You hit A Cocodrill for 45 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Cocodrill for 18 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Cocodrill for 56 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Cocodrill for 29 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 639 experience from this encounter.
+11
+A Cocodrill's body slowly changes into the form of a mimic.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+You are attacked by A Crebain. -  (Size: 3)
+11
+A Crebain hit you for 5 damage!
+42
+123
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+11
+A Crebain hit you for 7 damage!
+42
+116
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Crebain for 35 damage!
+11
+A Crebain hit you for 1 damage!
+42
+115
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Crebain for 37 damage!
+11
+A Crebain hit you for 2 damage!
+42
+113
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Crebain for 18 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 336 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Crebain's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You hit A Crebain for 51 damage!
+11
+A Crebain hit you for 1 damage!
+42
+112
+128
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You hit A Crebain for 21 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You hit A Crebain for 43 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 336 experience from this encounter.
+42
+142
+158
+0
+43
+39
+39
+48
+136
+1240
+49
+3
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Crebain's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You got away!
+20
+More
+
+
+
+
+
+
+
+10
+41
+178
+189
+The Iron Hills
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+155
+158
+0
+48
+137
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+158
+158
+0
+48
+138
+1240
+10
+11
+You are attacked by A Centipede. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+Which spell do you wish to cast?
+20
+All or Nothing
+
+
+
+
+
+
+Cancel
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You got away!
+20
+More
+
+
+
+
+
+
+
+10
+41
+179
+190
+The Iron Hills
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack A Ghillie Dhu. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You got away!
+20
+More
+
+
+
+
+
+
+
+10
+41
+180
+189
+The Iron Hills
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack A Kobold. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You got away!
+20
+More
+
+
+
+
+
+
+
+10
+41
+179
+188
+The Iron Hills
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack A Gnoll. -  (Size: 3)
+11
+A Gnoll hit you for 45 damage!
+42
+113
+158
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Gnoll for 37 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Gnoll for 20 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Gnoll for 31 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Gnoll for 54 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 498 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Gnoll's friend appears and attacks. -  (Size: 3)
+11
+A Gnoll hit you for 32 damage!
+42
+81
+158
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 498 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+You are attacked by A Pixie. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 192 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+94
+158
+0
+48
+139
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+107
+158
+0
+48
+140
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+120
+158
+0
+48
+141
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+133
+158
+0
+48
+142
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+146
+158
+0
+48
+143
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+158
+158
+0
+48
+144
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+48
+145
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack A Bogle. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 471 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Bogle's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 471 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+11
+You have found some treasure.  Do you want to inspect it?
+20
+
+
+
+
+
+Yes
+No
+No to All
+11
+You've found a vial of holy water!
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack A Bogle. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 471 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack A Cluricaun. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+58
+11
+You hit A Cluricaun for 53 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Cluricaun for 56 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 243 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack An Uldra. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit An Uldra for 58 damage!
+11
+An Uldra hit you for 14 damage!
+42
+144
+158
+0
+11
+An Uldra hit you for 9 damage!
+42
+135
+158
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+58
+11
+You hit An Uldra for 33 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit An Uldra for 61 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 279 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+11
+You have found some treasure.  Do you want to inspect it?
+20
+
+
+
+
+
+Yes
+No
+No to All
+11
+You've found a vial of holy water!
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+148
+158
+0
+48
+146
+1240
+10
+11
+You are attacked by A Serpent. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Serpent for 18 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Serpent for 32 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Serpent for 43 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Serpent for 21 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Serpent for 62 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 639 experience from this encounter.
+11
+A Serpent's body slowly changes into the form of a mimic.
+20
+More
+
+
+
+
+
+
+
+10
+11
+You have found some treasure.  Do you want to inspect it?
+20
+
+
+
+
+
+Yes
+No
+No to All
+11
+You have found a holy orb. You feel less sinful.
+20
+More
+
+
+
+
+
+
+
+58
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+158
+158
+0
+48
+147
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+48
+148
+1240
+10
+11
+You are attacked by A Beetle. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 132 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Beetle's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 132 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Beetle's friend appears and attacks. -  (Size: 3)
+11
+A Beetle hit you for 3 damage!
+42
+155
+158
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+35
+45
+Andro the Halfling
+Location: (179, 188)
+
+Account: Blake420
+Network: <unavailable>
+Channel: 1
+
+Level: 3
+Experience: 20352
+Next Level At: 28800
+
+Energy: 155 (158 + 0 shield)
+Strength: 39 (39 + 0 sword)
+Quickness: 35 (35 + 0 quicksilver)
+Brains: 90
+Magic Level: 4
+Mana: 148
+Gender: Male
+Poison: 0.0000
+Sin: 0.0000
+Lives: 0
+
+Gold: 176
+Gems: 0
+Holy Water: 3
+Amulets: 0
+Charms: 0
+Tokens: 0
+Staves / Crowns: 0
+Virgin: No
+Blessing: No
+Palantir: No
+Ring: No
+Staff of dead Istari: No
+
+Buffs:
+None
+
+Cloaked: No
+Blind: No
+Age: 294
+Degenerated: 1
+Played For: 00:14:00
+Loaded On: Mon Jul 13 04:47:43 2026
+Created On: Mon Jul 13 04:00:00 2026
+35
+45
+Andro the Halfling
+Location: (179, 188)
+
+Account: Blake420
+Network: <unavailable>
+Channel: 1
+
+Level: 3
+Experience: 20352
+Next Level At: 28800
+
+Energy: 155 (158 + 0 shield)
+Strength: 39 (39 + 0 sword)
+Quickness: 35 (35 + 0 quicksilver)
+Brains: 90
+Magic Level: 4
+Mana: 148
+Gender: Male
+Poison: 0.0000
+Sin: 0.0000
+Lives: 0
+
+Gold: 176
+Gems: 0
+Holy Water: 3
+Amulets: 0
+Charms: 0
+Tokens: 0
+Staves / Crowns: 0
+Virgin: No
+Blessing: No
+Palantir: No
+Ring: No
+Staff of dead Istari: No
+
+Buffs:
+None
+
+Cloaked: No
+Blind: No
+Age: 294
+Degenerated: 1
+Played For: 00:14:00
+Loaded On: Mon Jul 13 04:47:43 2026
+Created On: Mon Jul 13 04:00:00 2026
+11
+You blew it, Andro.
+11
+A Beetle hit you for 3 damage!
+42
+152
+158
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+58
+11
+You hit A Beetle for 23 damage!
+11
+A Beetle hit you for 1 damage!
+42
+151
+158
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Beetle for 40 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Beetle for 29 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 132 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+11
+You come across a battered dwarven smithy, wandering across the barren landscape.
+11
+He smiles at you and offers to show you his wares.
+20
+
+
+
+
+
+Yes
+No
+
+10
+11
+'Well, what can I do for you?'
+20
+Buy
+Sell
+Browse
+Order Monster
+
+
+
+Leave
+10
+20
+Holy Water
+
+
+
+
+
+
+Back
+10
+11
+'Well, what can I do for you?'
+20
+Buy
+Sell
+Browse
+Order Monster
+
+
+
+Leave
+10
+11
+'It's been a pleasure doing business with you!'.
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+158
+158
+0
+48
+149
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack An Idiot. -  (Size: 3)
+11
+An Idiot hit you for 5 damage!
+42
+153
+158
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You got away!
+20
+More
+
+
+
+
+
+
+
+10
+41
+178
+187
+The Iron Hills
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack A Zombie. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+11
+A Zombie hit you for 11 damage!
+42
+142
+158
+0
+11
+A Zombie hit you for 17 damage!
+42
+125
+158
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Zombie for 65 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 333 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+138
+158
+0
+48
+150
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+151
+158
+0
+48
+151
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+158
+158
+0
+48
+152
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack A Warg. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 456 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Warg's friend appears and attacks. -  (Size: 3)
+11
+A Warg hit you for 38 damage!
+42
+120
+158
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 456 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Warg's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 456 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Warg's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 456 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Warg's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 456 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Warg's friend appears and attacks. -  (Size: 3)
+11
+A Warg hit you for 28 damage!
+42
+92
+158
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Warg for 34 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Warg for 39 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Warg for 55 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Warg for 18 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 456 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Warg's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 456 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Warg's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 456 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Warg's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 456 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Warg's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 456 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Warg's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 456 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+You are attacked by A Beetle. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Beetle for 46 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit A Beetle for 35 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 132 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Beetle's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 132 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+A Beetle's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 132 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+11
+You have found 39 gold pieces.
+11
+  Do you want to pick them up?
+20
+
+
+
+
+
+Yes
+No
+No to All
+50
+215
+10
+11
+You have found 25 gold pieces.
+11
+  Do you want to pick them up?
+20
+
+
+
+
+
+Yes
+No
+No to All
+50
+240
+10
+11
+You have found some treasure.  Do you want to inspect it?
+20
+
+
+
+
+
+Yes
+No
+No to All
+11
+You have encountered a druid who teaches you the following words of wisdom:
+11
+	Halflings are said to be extremely lucky.
+20
+More
+
+
+
+
+
+
+
+58
+10
+11
+You have found 69 gold pieces.
+11
+  Do you want to pick them up?
+20
+
+
+
+
+
+Yes
+No
+No to All
+50
+309
+10
+11
+You have found some treasure.  Do you want to inspect it?
+20
+
+
+
+
+
+Yes
+No
+No to All
+11
+You've found a +31 buckler.
+20
+More
+
+
+
+
+
+
+
+42
+123
+189
+0
+45
+31
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+138
+189
+0
+48
+153
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+153
+189
+0
+48
+154
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+168
+189
+0
+48
+155
+1240
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+183
+189
+0
+48
+156
+1240
+10
+11
+You are attacked by A Fachan. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 417 experience from this encounter.
+42
+213
+219
+0
+43
+42
+42
+48
+176
+1320
+49
+4
+20
+More
+
+
+
+
+
+
+
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+219
+219
+0
+48
+177
+1320
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+48
+178
+1320
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack A Fachan. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 417 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+11
+You have found some treasure.  Do you want to inspect it?
+20
+
+
+
+
+
+Yes
+No
+No to All
+35
+45
+Andro the Halfling
+Location: (178, 187)
+
+Account: Blake420
+Network: <unavailable>
+Channel: 1
+
+Level: 4
+Experience: 29442
+Next Level At: 45000
+
+Energy: 219 (188 + 31 shield)
+Strength: 42 (42 + 0 sword)
+Quickness: 35 (35 + 0 quicksilver)
+Brains: 96
+Magic Level: 5
+Mana: 178
+Gender: Male
+Poison: 0.0000
+Sin: 0.0040
+Lives: 0
+
+Gold: 309
+Gems: 0
+Holy Water: 3
+Amulets: 0
+Charms: 0
+Tokens: 0
+Staves / Crowns: 0
+Virgin: No
+Blessing: No
+Palantir: No
+Ring: No
+Staff of dead Istari: No
+
+Buffs:
+None
+
+Cloaked: No
+Blind: No
+Age: 331
+Degenerated: 1
+Played For: 00:15:25
+Loaded On: Mon Jul 13 04:47:43 2026
+Created On: Mon Jul 13 04:00:00 2026
+35
+45
+Andro the Halfling
+Location: (178, 187)
+
+Account: Blake420
+Network: <unavailable>
+Channel: 1
+
+Level: 4
+Experience: 29442
+Next Level At: 45000
+
+Energy: 219 (188 + 31 shield)
+Strength: 42 (42 + 0 sword)
+Quickness: 35 (35 + 0 quicksilver)
+Brains: 96
+Magic Level: 5
+Mana: 178
+Gender: Male
+Poison: 0.0000
+Sin: 0.0040
+Lives: 0
+
+Gold: 309
+Gems: 0
+Holy Water: 3
+Amulets: 0
+Charms: 0
+Tokens: 0
+Staves / Crowns: 0
+Virgin: No
+Blessing: No
+Palantir: No
+Ring: No
+Staff of dead Istari: No
+
+Buffs:
+None
+
+Cloaked: No
+Blind: No
+Age: 331
+Degenerated: 1
+Played For: 00:15:26
+Loaded On: Mon Jul 13 04:47:43 2026
+Created On: Mon Jul 13 04:00:00 2026
+11
+You've found an amulet of protection.
+20
+More
+
+
+
+
+
+
+
+58
+59
+1
+10
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+10
+11
+You find and attack An Orc. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 423 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+An Orc's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 423 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+An Orc's friend appears and attacks. -  (Size: 3)
+11
+An Orc hit you for 61 damage!
+42
+158
+219
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 423 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+An Orc's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 423 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+An Orc's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You blew it, Andro.
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit An Orc for 27 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit An Orc for 42 damage!
+11
+An Orc hit you for 25 damage!
+42
+133
+219
+0
+11
+An Orc hit you for 22 damage!
+42
+111
+219
+0
+20
+Melee
+Skirmish
+
+Spell
+Rest
+
+Evade
+
+11
+You hit An Orc for 27 damage!
+11
+You killed it.  Good work, Andro.
+11
+
+11
+You have earned 423 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+An Orc's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 423 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+An Orc's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 423 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+An Orc's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You hit An Orc for 41 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 423 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+An Orc's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You hit An Orc for 64 damage!
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 423 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+An Orc's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You made it!
+11
+
+11
+You have earned 423 experience from this encounter.
+20
+More
+
+
+
+
+
+
+
+10
+10
+11
+An Orc's friend appears and attacks. -  (Size: 3)
+20
+Melee
+Skirmish
+
+Spell
+Rest
+Luckout
+Evade
+
+11
+You got away!
+20
+More
+
+
+
+
+
+
+
+10
+41
+179
+187
+The Iron Hills
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+128
+219
+0
+48
+179
+1320
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+145
+219
+0
+48
+180
+1320
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+162
+219
+0
+48
+181
+1320
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+179
+219
+0
+48
+182
+1320
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+196
+219
+0
+48
+183
+1320
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+213
+219
+0
+48
+184
+1320
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+42
+219
+219
+0
+48
+185
+1320
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+48
+186
+1320
+10
+21
+Rest
+Move To
+Info
+Hunt
+
+
+
+Quit
+10
+30
+Andro retires from the realm.
+6
+Andro
+32
+11
+Do you wish to continue playing?
+20
+
+
+
+
+
+Yes
+No
+
+58
+30
+Anorc was smurfed by Aureya Smurf.
+58
+6
+Anorc
+4
+10
+3
+2
+11
+W e l c o m e   t o   P h a n t a s i a (vers. 5.1.0-beta, built Jan  4 2025)!
+11
+https://www.phantasia5.com
+11
+
+11
+Please register on our Phorums at https://www.phantasia5.com/phorums
+11
+
+11
+There is no ruler at this time.
+11
+The Valar is Coldheart
+11
+
+11
+Do you need to sign up for an account, or are you ready to log in?
+20
+Sign Up
+Log In
+
+New Pass
+
+
+Scoreboard
+Quit

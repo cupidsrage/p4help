@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phantasia Advisor</title>
+<style>
+  :root{
+    --bg:#1a1712; --panel:#252017; --panel2:#2e2719; --ink:#e8dcc0;
+    --dim:#8a7d64; --line:#463c28; --gold:#c9a227; --green:#5f9e4a;
+    --amber:#d08b28; --red:#b5462f; --blue:#4a7fa5;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:14px/1.5 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    padding:18px; max-width:1240px; margin:0 auto;
+  }
+  h1{
+    font-size:20px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--gold); font-weight:600; margin-bottom:2px;
+  }
+  .sub{color:var(--dim); font-size:12px; margin-bottom:16px}
+  .grid{display:grid; grid-template-columns:290px 1fr; gap:14px; align-items:start}
+  .card{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:3px; padding:14px; margin-bottom:14px;
+  }
+  .card h2{
+    font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--dim); font-weight:600; margin-bottom:10px;
+    border-bottom:1px solid var(--line); padding-bottom:6px;
+  }
+  .stat{display:flex; justify-content:space-between; padding:3px 0; font-size:13px}
+  .stat b{font-weight:600; font-variant-numeric:tabular-nums}
+  .bar{height:5px; background:#12100c; border-radius:2px; overflow:hidden; margin:3px 0 7px}
+  .bar i{display:block; height:100%; background:var(--green)}
+  .bar.m i{background:var(--blue)}
+  .muted{color:var(--dim)}
+  .big{font-size:22px; font-weight:600; letter-spacing:.02em}
+
+  .verdict{padding:12px; border-radius:3px; margin-bottom:12px; border-left:4px solid}
+  .v-go{background:#1e2a18; border-color:var(--green)}
+  .v-mid{background:#2b2313; border-color:var(--amber)}
+  .v-no{background:#2b1a15; border-color:var(--red)}
+  .v-t{font-size:17px; font-weight:600; letter-spacing:.03em}
+  .v-s{font-size:12px; color:var(--dim); margin-top:3px}
+
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th{
+    text-align:left; font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--dim); font-weight:600; padding:5px 8px; border-bottom:1px solid var(--line);
+  }
+  td{padding:6px 8px; border-bottom:1px solid #1f1a12; font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:none}
+  .act{font-weight:600}
+  .pct{font-weight:600}
+  .g{color:var(--green)} .a{color:var(--amber)} .r{color:var(--red)} .d{color:var(--dim)}
+
+  .warn{
+    background:#2b1a15; border:1px solid #5c2f22; color:#e0a894;
+    padding:7px 10px; border-radius:3px; font-size:12px; margin-bottom:7px;
+  }
+  .note{
+    background:#2b2313; border:1px solid #5c4a22; color:#dbc088;
+    padding:7px 10px; border-radius:3px; font-size:12px; margin-bottom:7px;
+  }
+  .idle{text-align:center; padding:40px 20px; color:var(--dim)}
+  .idle .big{color:var(--line); font-size:34px; margin-bottom:8px}
+
+  .tabs{display:flex; gap:2px; margin-bottom:12px}
+  .tab{
+    padding:6px 13px; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    background:var(--panel); border:1px solid var(--line); border-bottom:none;
+    color:var(--dim); cursor:pointer; border-radius:3px 3px 0 0;
+  }
+  .tab.on{background:var(--panel2); color:var(--gold)}
+  .pane{display:none} .pane.on{display:block}
+
+  input,select{
+    background:#12100c; border:1px solid var(--line); color:var(--ink);
+    padding:5px 8px; border-radius:2px; font:inherit; font-size:13px;
+  }
+  input:focus,select:focus{outline:none; border-color:var(--gold)}
+  .row{display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap}
+  .row label{font-size:11px; color:var(--dim); letter-spacing:.08em; text-transform:uppercase}
+
+  .dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px}
+  .live{background:var(--green)} .off{background:var(--red)}
+  .log{max-height:190px; overflow-y:auto; font-size:12px}
+  .log div{padding:3px 0; border-bottom:1px solid #1f1a12; color:var(--dim)}
+  .log b{color:var(--ink); font-weight:600}
+  .sortable{cursor:pointer; user-select:none}
+  .sortable:hover{color:var(--gold)}
+</style>
+</head>
+<body>
+
+<h1>Phantasia Advisor</h1>
+<div class="sub"><span id="dot" class="dot off"></span><span id="conn">waiting for client…</span></div>
+
+<div class="grid">
+  <!-- LEFT: live character -->
+  <div>
+    <div class="card">
+      <h2>Character</h2>
+      <div id="who" class="big" style="margin-bottom:10px">—</div>
+
+      <div class="stat"><span class="muted">Energy</span><b id="en">—</b></div>
+      <div class="bar"><i id="enbar" style="width:0%"></i></div>
+
+      <div class="stat"><span class="muted">Mana</span><b id="mn">—</b></div>
+      <div class="bar m"><i id="mnbar" style="width:0%"></i></div>
+
+      <div class="stat"><span class="muted">Strength</span><b id="st">—</b></div>
+      <div class="stat"><span class="muted">Quickness</span><b id="qk">—</b></div>
+      <div class="stat"><span class="muted">Brains</span><b id="br">—</b></div>
+      <div class="stat"><span class="muted">Magic Level</span><b id="ml">—</b></div>
+      <div class="stat"><span class="muted">Level</span><b id="lv">—</b></div>
+      <div class="stat"><span class="muted">Sword</span><b id="sw">—</b></div>
+      <div class="stat"><span class="muted">Shield</span><b id="sh">—</b></div>
+      <div class="stat"><span class="muted">Gold</span><b id="gp">—</b></div>
+      <div class="stat"><span class="muted">Location</span><b id="loc">—</b></div>
+      <div id="charwarn" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card" id="trovecard" style="display:none">
+      <h2>Treasure Trove</h2>
+      <div id="trove"></div>
+    </div>
+
+    <div class="card">
+      <h2>Session</h2>
+      <div class="stat"><span class="muted">Fights</span><b id="nfights">0</b></div>
+      <div class="stat"><span class="muted">Exp gained</span><b id="expgain">0</b></div>
+      <div class="stat"><span class="muted">Energy lost</span><b id="enlost">0</b></div>
+      <div class="stat"><span class="muted">Luckouts</span><b id="lkstat">0 / 0</b></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: tabs -->
+  <div>
+    <div class="tabs">
+      <div class="tab on" data-p="fight">Fight</div>
+      <div class="tab" data-p="calc">What-If</div>
+      <div class="tab" data-p="hunt">Where to Hunt</div>
+      <div class="tab" data-p="mon">Monsters</div>
+      <div class="tab" data-p="ref">Reference</div>
+    </div>
+
+    <!-- FIGHT -->
+    <div class="pane on" id="p-fight">
+      <div class="card">
+        <div id="fight">
+          <div class="idle">
+            <div class="big">⚔</div>
+            <div>No monster. Go hunt something.</div>
+            <div style="font-size:12px;margin-top:8px">
+              Open <b>Info → Stats</b> once so brains &amp; magic level load.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Recent</h2>
+        <div class="log" id="log"><div class="muted">nothing yet</div></div>
+      </div>
+    </div>
+
+    <!-- WHAT-IF -->
+    <div class="pane" id="p-calc">
+      <div class="card">
+        <h2>What-If — try any monster at any size</h2>
+        <div class="row">
+          <label>Monster</label>
+          <select id="c-mon" style="min-width:190px"></select>
+          <label>Size</label>
+          <input id="c-size" type="number" value="2" min="1" max="30" style="width:62px">
+          <label style="margin-left:6px">
+            <input type="checkbox" id="c-live" checked style="width:auto"> use live stats
+          </label>
+        </div>
+        <div class="row" id="c-manual" style="display:none">
+          <label>Brains</label><input id="c-br" type="number" value="84" style="width:70px">
+          <label>Str</label><input id="c-st" type="number" value="36" style="width:70px">
+          <label>Energy</label><input id="c-en" type="number" value="128" style="width:70px">
+          <label>Mana</label><input id="c-mn" type="number" value="98" style="width:70px">
+          <label>ML</label><input id="c-ml" type="number" value="3" style="width:60px">
+          <label>Sword</label><input id="c-sw" type="number" value="0" style="width:60px">
+        </div>
+        <div id="calcout" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <!-- WHERE TO HUNT -->
+    <div class="pane" id="p-hunt">
+      <div class="card">
+        <h2>Where you should be fighting</h2>
+        <div id="huntbest"></div>
+      </div>
+      <div class="card">
+        <h2>Every circle <span class="muted">— circle = floor(distance/125)+1</span></h2>
+        <div style="max-height:460px;overflow-y:auto">
+          <table id="zonetbl">
+            <thead><tr>
+              <th>Circle</th><th>Zone</th><th>Size</th>
+              <th>Lethal</th><th>Survive 20</th><th>Exp/fight</th><th></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- MONSTERS -->
+    <div class="pane" id="p-mon">
+      <div class="card">
+        <h2>Monster table — luckout odds at your brains</h2>
+        <div class="row">
+          <label>At size</label>
+          <input id="m-size" type="number" value="2" min="1" max="30" style="width:62px">
+          <span class="muted" style="font-size:12px">
+            click a column to sort · green = free luckout kill
+          </span>
+        </div>
+        <div style="max-height:520px;overflow-y:auto">
+          <table id="montbl">
+            <thead><tr>
+              <th class="sortable" data-k="name">Monster</th>
+              <th class="sortable" data-k="brains">Brains</th>
+              <th class="sortable" data-k="luck">Luckout</th>
+              <th class="sortable" data-k="energy">Energy</th>
+              <th class="sortable" data-k="strength">Str</th>
+              <th class="sortable" data-k="experience">Exp</th>
+              <th>Watch out</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- REFERENCE -->
+    <div class="pane" id="p-ref">
+      <div class="card">
+        <h2>Combat formulas <span class="muted">(from fight.c)</span></h2>
+        <table>
+          <tr><td class="act">Might</td><td class="muted">strength × (1 + √sword × 0.04) &nbsp;— ×2 with ring</td></tr>
+          <tr><td class="act">Melee</td><td class="muted">(0.5 + 1.3·r) × might &nbsp;→ degrades its <b>strength</b></td></tr>
+          <tr><td class="act">Skirmish</td><td class="muted">(0.33 + 1.1·r) × might &nbsp;→ degrades its <b>speed</b></td></tr>
+          <tr><td class="act">Magic Bolt</td><td class="muted">mana × (0.7 + 0.6·r) × (ML<sup>0.4</sup> + 1) &nbsp;— needs <b>ML 5</b></td></tr>
+          <tr><td class="act">All-or-Nothing</td><td class="muted">3000·ML / (exp + 10000·ML) → instant kill · 1 mana · <b>fail doubles its str &amp; speed</b></td></tr>
+          <tr><td class="act">Luckout</td><td class="muted">r·yourBrains ≥ r·itsBrains → instant kill · <b>free</b> · <b>once per fight</b></td></tr>
+          <tr><td class="act">Evade</td><td class="muted">r·(quick·1.1+1)·(brains+1) &gt; r·(itsSpeed·1.1+1)·(itsBrains+1)</td></tr>
+          <tr><td class="act">Its attack</td><td class="muted">1 + r × itsStrength</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h2>Spell gates</h2>
+        <table>
+          <thead><tr><th>Spell</th><th>Magic Level</th><th>Mana</th></tr></thead>
+          <tbody id="spelltbl"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2>Size scaling</h2>
+        <div class="muted" style="font-size:13px">
+          <p>energy · brains · experience &nbsp;<b>× size</b></p>
+          <p>strength &nbsp;<b>+50% per size over 1</b></p>
+          <p>speed rises very slowly</p>
+          <p style="margin-top:8px;color:var(--amber)">
+            Your brains stay flat while monster brains scale — so luckout decays with size.
+            What matters is <b>base</b> brains: a size-3 Centipede (8→24) is still a free kill;
+            a size-2 Sprite (37→74) already isn't.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let MONS = {}, NOTES = {}, LAST = null, ZONE = null;
+let S = {fights:0, exp:0, enlost:0, lk:0, lkwin:0};
+const SPELLS = [
+  ["All or Nothing", 0, 1], ["Magic Bolt", 5, "variable"],
+  ["Increase Might", 15, 30], ["Haste", 25, 35], ["Force Field", 35, 60],
+  ["Transport", 45, 100], ["Paralyze", 60, 125], ["Transform", 75, 150],
+];
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+// luckout closed form: P(r*a >= r*b)
+function luck(a, b){
+  if(!(a>0) || !(b>0)) return -1;
+  return a >= b ? 1 - b/(2*a) : a/(2*b);
+}
+function scale(name, size){
+  const m = MONS[name]; if(!m) return null;
+  size = Math.max(1, size|0);
+  return {
+    name, size,
+    strength: m.strength * (1 + 0.5*(size-1)),
+    brains: m.brains * size,
+    speed: m.speed,
+    energy: m.energy * size,
+    experience: m.experience * size,
+    specials: m.specials, base_brains: m.brains,
+  };
+}
+const cls = p => p >= .75 ? 'g' : p >= .60 ? 'a' : 'r';
+
+// tabs
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+  document.querySelectorAll('.pane').forEach(x => x.classList.remove('on'));
+  t.classList.add('on');
+  $('p-' + t.dataset.p).classList.add('on');
+  if(t.dataset.p === 'mon') drawMon();
+  if(t.dataset.p === 'calc') drawCalc();
+  if(t.dataset.p === 'hunt') drawHunt();
+});
+
+// ---- live poll ----
+async function poll(){
+  try{
+    const r = await fetch('/state');
+    const d = await r.json();
+    $('dot').className = 'dot ' + (d.connected ? 'live' : 'off');
+    $('conn').textContent = d.connected
+      ? 'connected — reading live'
+      : 'waiting for client…';
+    if(d.player) drawChar(d.player);
+    drawTrove(d.trove);
+    ZONE = d.zone;
+    if(document.querySelector('.tab[data-p=hunt]').classList.contains('on')) drawHunt();
+    if(d.monsters) { MONS = d.monsters; NOTES = d.notes || {}; }
+    drawFight(d.fight);
+    if(d.session) drawSess(d.session);
+    if(d.log) drawLog(d.log);
+  }catch(e){
+    $('dot').className = 'dot off';
+    $('conn').textContent = 'proxy not responding';
+  }
+}
+
+function drawChar(p){
+  LAST = p;
+  $('who').textContent = p.name || '—';
+  $('en').textContent = `${p.energy|0} / ${p.max_energy|0}`;
+  $('enbar').style.width = (p.max_energy ? 100*p.energy/p.max_energy : 0) + '%';
+  $('mn').textContent = `${p.mana|0}`;
+  $('mnbar').style.width = Math.min(100, p.mana/2) + '%';
+  $('st').textContent = p.strength|0;
+  $('qk').textContent = p.quickness|0;
+  $('br').textContent = p.brains ? (p.brains|0) : '?';
+  $('ml').textContent = p.magiclvl ? (p.magiclvl|0) : '?';
+  $('lv').textContent = p.level|0;
+  $('sw').textContent = p.sword|0;
+  $('sh').textContent = p.shield|0;
+  $('gp').textContent = p.gold|0;
+  $('loc').textContent = p.location || '—';
+
+  let w = '';
+  if(!p.brains || !p.magiclvl)
+    w += `<div class="warn">Open <b>Info → Stats</b> once — brains &amp; magic level
+          aren't sent as packets and luckout needs them.</div>`;
+  else if(p.magiclvl < 5)
+    w += `<div class="note"><b>Magic Bolt locked</b> (needs ML 5, you're ${p.magiclvl|0}).
+          Your ${p.mana|0} mana can't be spent on damage yet.</div>`;
+  $('charwarn').innerHTML = w;
+}
+
+function drawHunt(){
+  if(!ZONE){
+    const p = LAST || {};
+    let why;
+    if(!p.name){
+      why = 'Waiting for the game client to connect…';
+    } else if(!p.brains || !p.magiclvl){
+      why = `<b>Open Info → Stats in-game.</b><br>
+             Brains and Magic Level aren't sent as packets — they only appear on
+             that screen — and the hunting advice needs them to judge what you
+             can survive.`;
+    } else {
+      why = 'Move one square so the game reports your position.';
+    }
+    $('huntbest').innerHTML = `<div class="note">${why}</div>`;
+    document.querySelector('#zonetbl tbody').innerHTML = '';
+    return;
+  }
+  const b = ZONE.best, cur = ZONE.current_row;
+  let h = '';
+  const surv = x => (x.p_survive_session*100);
+  if(cur && b && cur.circle === b.circle){
+    h = `<div class="verdict v-go">
+      <div class="v-t">Stay here — circle ${cur.circle}</div>
+      <div class="v-s">${esc(cur.zone)} · ~${cur.exp_per_fight.toFixed(0)} exp/fight ·
+        <b>${surv(cur).toFixed(0)}% chance to survive 20 fights</b></div></div>`;
+  } else if(b){
+    const out = cur && b.circle > cur.circle;
+    h = `<div class="verdict ${out?'v-mid':'v-no'}">
+      <div class="v-t">Move ${out?'out':'back in'} — to circle ${b.circle}</div>
+      <div class="v-s">
+        ${esc(b.zone)} · ~${b.distance.toFixed(0)} from origin<br>
+        ~${b.exp_per_fight.toFixed(0)} exp/fight ·
+        <b>${surv(b).toFixed(0)}% chance to survive 20 fights</b>
+        ${cur ? `<br><span class="muted">(circle ${cur.circle}: ~${cur.exp_per_fight.toFixed(0)} exp,
+          ${surv(cur).toFixed(0)}% survival)</span>` : ''}
+      </div></div>`;
+  }
+  if(cur && surv(cur) < 60)
+    h = `<div class="verdict v-no"><div class="v-t">GET OUT — circle ${cur.circle} is killing you</div>
+      <div class="v-s">Only a <b>${surv(cur).toFixed(0)}%</b> chance you survive 20 fights here.
+      Move back toward the origin.</div></div>` + h;
+  if(b && b.deadly && b.deadly.length)
+    h += `<div class="warn">Still avoid there: ${b.deadly.map(esc).join(', ')}</div>`;
+  h += `<div class="muted" style="font-size:12px;margin-top:8px">
+    <b>"Survive 20"</b> is your chance of getting through a 20-fight session alive.
+    Death is absorbing — one bad monster ends the run — so a zone that's "only"
+    13% lethal per fight leaves you a <b>6%</b> chance of surviving a session.
+    Exp/fight is <i>expected</i> exp: you don't bank experience from a fight you die in.</div>`;
+  $('huntbest').innerHTML = h;
+
+  const tb = document.querySelector('#zonetbl tbody');
+  tb.innerHTML = (ZONE.rows||[]).map(r => {
+    const isCur = ZONE.current === r.circle;
+    const isBest = ZONE.best && ZONE.best.circle === r.circle;
+    const sv = r.p_survive_session*100;
+    const sc = sv >= 80 ? 'g' : sv >= 40 ? 'a' : 'r';
+    let tag = '';
+    if(isCur) tag = '<span class="a">you are here</span>';
+    if(isBest) tag = '<span class="g">← go here</span>';
+    return `<tr${isBest?' style="background:#1e2a18"':isCur?' style="background:#2b2313"':''}>
+      <td><b>${r.circle}</b></td>
+      <td class="d">${esc(r.zone)}</td>
+      <td class="d">${r.size}</td>
+      <td class="${sc}">${(r.lethal_frac*100).toFixed(0)}%</td>
+      <td class="${sc}"><b>${sv.toFixed(0)}%</b></td>
+      <td class="d">${r.exp_per_fight.toFixed(0)}</td>
+      <td>${tag}</td>
+    </tr>`;
+  }).join('');
+}
+
+function drawTrove(t){
+  const card = $('trovecard');
+  if(!t){ card.style.display='none'; return; }
+  card.style.display='block';
+  let h = '';
+
+  // HEADLINE: the triangulated guess for where the TROVE actually is.
+  // (Each scroll's distance is fudged +/-12.5%, so we combine readings.)
+  if(t.solved){
+    const s = t.solved;
+    const dist = Math.round(Math.hypot(
+      (s.x - (t.origin?t.origin[0]:s.x)),
+      (s.y - (t.origin?t.origin[1]:s.y))));
+    h += `<div class="muted" style="font-size:11px">BEST GUESS · ${s.readings} scroll${s.readings>1?'s':''} triangulated</div>
+      <div class="big g" style="font-size:20px">${s.heading||'?'} &times; ${(s.steps||0).toLocaleString()}</div>
+      <div class="muted" style="font-size:13px;margin-top:2px">
+        trove is near <b>${s.x}, ${s.y}</b><br>
+        about <b>${(s.steps||dist).toLocaleString()}</b> squares away · give or take ${Math.round(s.uncertainty)}
+      </div>`;
+    if(s.readings < 2){
+      h += `<div class="warn" style="font-size:11px;margin-top:5px">
+        Only 1 reading. The distance the scroll gives is deliberately off by up to
+        ±12.5%, so this is rough. Walk toward it, read the next scroll from a NEW
+        spot, and this locks in.</div>`;
+    } else {
+      h += `<div class="muted" style="font-size:11px;margin-top:5px">
+        Head that way and read the next scroll to tighten it further.</div>`;
+    }
+  } else if(t.remaining){
+    // no triangulation yet: just this scroll's arrow
+    const r = t.remaining;
+    h += r.arrived
+      ? `<div class="big g">DIG HERE</div>`
+      : `<div class="muted" style="font-size:11px">THIS SCROLL SAYS</div>
+         <div class="big">${r.heading} &times; ${r.steps.toLocaleString()}</div>
+         <div class="warn" style="font-size:11px;margin-top:4px">
+           Distance is fudged ±12.5% — read another scroll from a different spot
+           to triangulate the real location.</div>`;
+  } else {
+    h += `<div class="big">${t.distance.toLocaleString()} ${esc(t.direction)}</div>
+          <div class="muted" style="font-size:12px">move once to fix position</div>`;
+  }
+
+  // ---- the on-foot sweep ----
+  if(t.search){
+    const s = t.search;
+    const pct = (s.progress*100).toFixed(0);
+    // Convergence is FAST: the fudge is +/-12.5% of the REMAINING distance, so
+    // as you close in the error collapses. Measured: scroll 1 ~ +/-138,
+    // scroll 2 ~ +/-41, scroll 3 ~ +/-11, scroll 4 ~ +/-3.
+    const big = s.total > 900;      // >~30x30 -- another scroll is worth more
+    h += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">
+      <div class="muted" style="font-size:11px">
+        SWEEP — the trove is ONE exact square, so you have to walk onto it
+      </div>`;
+    if(big){
+      h += `<div class="warn" style="margin:6px 0">
+        <b>${s.total.toLocaleString()} squares</b> — walk toward the guess and read
+        the next scroll instead. The error shrinks fast as you close in
+        (scroll 3 is usually ~500 squares, scroll 4 under 50).</div>`;
+    } else {
+      h += `<div class="verdict v-go" style="padding:6px 8px;margin:6px 0">
+        <div class="v-t" style="font-size:13px">Small enough — sweep it</div>
+        <div class="v-s">${s.total.toLocaleString()} squares. Walk the grid below.</div>
+      </div>`;
+    }
+    h += `<div>
+      <div style="display:flex;align-items:center;gap:8px;margin:5px 0">
+        <div style="flex:1;height:5px;background:#0c0a07;border-radius:3px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:var(--g)"></div>
+        </div>
+        <div class="muted" style="font-size:11px">${s.covered}/${s.total} (${pct}%)</div>
+      </div>`;
+
+    if(s.next){
+      h += `<div class="verdict v-go" style="padding:6px 8px;margin:6px 0">
+        <div class="v-t" style="font-size:14px">Go ${s.next.heading} × ${s.next.steps}</div>
+        <div class="v-s">next unsearched square: ${s.next.x}, ${s.next.y}</div>
+      </div>`;
+    } else {
+      h += `<div class="warn">Whole box swept and no trove. The estimate must be
+        off — read another scroll to re-triangulate.</div>`;
+    }
+
+    // the grid
+    if(s.grid && s.grid.length){
+      h += '<div style="margin-top:6px;line-height:0;font-size:0">';
+      for(const row of s.grid){
+        for(const c of row){
+          const bg = c.here ? 'var(--a)' : (c.walked ? '#2f4a28' : '#2a2419');
+          const bd = c.here ? 'var(--a)' : (c.walked ? '#3f6136' : '#3a3226');
+          h += `<span title="${c.x},${c.y}" style="display:inline-block;
+                 width:9px;height:9px;margin:1px;background:${bg};
+                 border:1px solid ${bd};border-radius:1px"></span>`;
+        }
+        h += '<br>';
+      }
+      h += '</div>';
+      h += `<div class="muted" style="font-size:10px;margin-top:5px">
+        <span style="color:#5f8f52">■</span> walked &nbsp;
+        <span style="color:#6b6250">■</span> not yet &nbsp;
+        <span style="color:var(--a)">■</span> you &nbsp;·&nbsp; north is up
+      </div>`;
+    }
+    h += '</div>';
+  }
+
+  // small print: the individual scroll reading
+  h += `<div class="muted" style="font-size:11px;margin-top:8px;
+         padding-top:6px;border-top:1px solid var(--line)">
+         scroll ${t.leg}: ${t.distance.toLocaleString()} ${esc(t.direction)}
+         · read at ${t.origin ? t.origin.join(',') : '?'}
+       </div>`;
+  $('trove').innerHTML = h;
+}
+
+function drawSess(s){
+  S = s;
+  $('nfights').textContent = s.fights;
+  $('expgain').textContent = (s.exp||0).toLocaleString();
+  $('enlost').textContent = s.enlost|0;
+  $('lkstat').textContent = `${s.lkwin} / ${s.lk}`;
+}
+
+function drawLog(rows){
+  $('log').innerHTML = rows.length
+    ? rows.slice(-12).reverse().map(r => `<div>${esc(r)}</div>`).join('')
+    : '<div class="muted">nothing yet</div>';
+}
+
+function drawFight(f){
+  if(!f || !f.name){
+    $('fight').innerHTML = `<div class="idle"><div class="big">&#9876;</div>
+      <div>No monster. Go hunt something.</div></div>`;
+    return;
+  }
+  const p = LAST || {};
+  const S = f.state || {};
+  const hp = S.m_energy !== undefined ? S.m_energy : f.energy;
+  const hpPct = f.energy ? Math.max(0, 100*hp/f.energy) : 0;
+
+  const NAMES = {
+    melee:'Melee', skirmish:'Skirmish', luckout:'Luckout', evade:'Evade',
+    bolt:'Magic Bolt', aon:'All or Nothing', might:'Increase Might',
+    paralyze:'Paralyze', nick:'Nick', ring:'Use Ring',
+  };
+
+  let h = `<div style="display:flex;justify-content:space-between;align-items:baseline">
+      <div class="big">${esc(f.name)}
+        <span class="muted" style="font-size:14px">size ${f.size}</span>
+        ${f.flock?'<span class="muted" style="font-size:12px"> · flock</span>':''}
+      </div>
+      <div class="muted" style="font-size:12px">
+        ${S.rounds ? 'round '+S.rounds+' · ' : ''}str ${(S.m_strength||f.strength)|0}
+        · brains ${f.brains|0}
+      </div>
+    </div>
+    <div class="stat" style="margin-top:6px">
+      <span class="muted">Its energy</span>
+      <b>${hp|0} / ${f.energy|0}</b>
+    </div>
+    <div class="bar"><i style="width:${hpPct}%;background:var(--red)"></i></div>`;
+
+  // ---------- THE RECOMMENDATION ----------
+  const mv = (f.moves && f.moves[0]) || null;
+  if(mv){
+    const good = mv.win >= .85, mid = mv.win >= .5;
+    const v = mv.move === 'evade' ? 'v-no' : good ? 'v-go' : mid ? 'v-mid' : 'v-no';
+    let title = NAMES[mv.move] || mv.move;
+    if(mv.move === 'bolt' && mv.arg) title = `Magic Bolt — ${mv.arg} mana`;
+    h += `<div class="verdict ${v}" style="margin-top:12px">
+        <div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+                    color:var(--dim);margin-bottom:3px">Do this now</div>
+        <div class="v-t" style="font-size:21px">${esc(title)}</div>
+        <div class="v-s" style="margin-top:5px">${esc(f.why||'')}</div>
+        <div class="v-s" style="margin-top:6px">
+          <b class="${good?'g':mid?'a':'r'}">${(mv.win*100).toFixed(0)}% win</b>
+          ${mv.flee>0?` · ${(mv.flee*100).toFixed(0)}% escape`:''}
+          · costs ~${mv.energy_lost.toFixed(0)} energy from here
+        </div>
+      </div>`;
+  }
+
+  // ---------- fight state chips ----------
+  let chips = [];
+  if(S.luckout_spent) chips.push(`<span class="r">luckout SPENT</span>`);
+  else if(f.luckout >= 0) chips.push(`<span class="g">luckout ready (${(f.luckout*100).toFixed(0)}%)</span>`);
+  if(S.aon_spent) chips.push(`<span class="r">AoN spent</span>`);
+  if(S.strength_spell > 0) chips.push(`<span class="g">+${S.strength_spell.toFixed(0)} might</span>`);
+  if(S.paralyzed) chips.push(`<span class="g">PARALYZED</span>`);
+  if(S.might) chips.push(`<span class="d">might ${S.might.toFixed(0)}</span>`);
+  if(chips.length)
+    h += `<div class="muted" style="font-size:12px;margin-bottom:10px">${chips.join(' &nbsp;·&nbsp; ')}</div>`;
+
+  if(f.base_brains && f.size > 1)
+    h += `<div class="muted" style="font-size:12px;margin-bottom:8px">
+      size ${f.size}&times; scales its brains ${f.base_brains} &rarr; <b>${f.brains|0}</b>
+      (yours stays ${p.brains|0})</div>`;
+
+  (f.warnings||[]).forEach(w => h += `<div class="warn">${esc(w)}</div>`);
+
+  // ---------- all moves ----------
+  if(f.moves && f.moves.length > 1){
+    h += `<table style="margin-top:10px"><thead><tr>
+        <th>Every option</th><th>Win</th><th>Escape</th><th>Energy cost</th>
+      </tr></thead><tbody>`;
+    f.moves.forEach((a,i) => {
+      const c = a.win >= .85 ? 'g' : a.win >= .5 ? 'a' : 'r';
+      let lbl = NAMES[a.move] || a.move;
+      if(a.move==='bolt' && a.arg) lbl += ` (${a.arg} mana)`;
+      h += `<tr${i===0?' style="background:#2a2418"':''}>
+        <td class="act">${esc(lbl)}</td>
+        <td class="pct ${c}">${(a.win*100).toFixed(0)}%</td>
+        <td class="d">${a.flee>0?(a.flee*100).toFixed(0)+'%':'—'}</td>
+        <td class="d">${a.energy_lost.toFixed(1)}</td>
+      </tr>`;
+    });
+    h += `</tbody></table>`;
+  }
+
+  // ---------- opening game plans ----------
+  if(f.plans && f.plans.length){
+    h += `<div style="margin-top:14px">
+      <div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+                  color:var(--dim);margin-bottom:6px">Whole-fight plans</div>
+      <table><tbody>`;
+    f.plans.forEach(pl => {
+      const c = pl.win >= .85 ? 'g' : pl.win >= .5 ? 'a' : 'r';
+      h += `<tr>
+        <td class="act">${esc(pl.policy)}</td>
+        <td class="pct ${c}">${(pl.win*100).toFixed(0)}%</td>
+        <td class="d">${pl.flee>0?(pl.flee*100).toFixed(0)+'% flee':''}</td>
+        <td class="d">${pl.energy_lost.toFixed(0)} en</td>
+        <td class="d">${pl.mana_spent>0?pl.mana_spent.toFixed(0)+' mana':'free'}</td>
+        <td class="d">${pl.rounds.toFixed(1)} rds</td>
+      </tr>`;
+    });
+    h += `</tbody></table></div>`;
+  }
+
+  $('fight').innerHTML = h;
+}
+
+// ---- monster table ----
+let sortK = 'luck', sortAsc = false;
+document.querySelectorAll('#montbl .sortable').forEach(th => th.onclick = () => {
+  const k = th.dataset.k;
+  if(sortK === k) sortAsc = !sortAsc; else { sortK = k; sortAsc = (k === 'name'); }
+  drawMon();
+});
+$('m-size').oninput = drawMon;
+
+function drawMon(){
+  const size = Math.max(1, parseInt($('m-size').value) || 1);
+  const brains = (LAST && LAST.brains) || 0;
+  let rows = Object.keys(MONS).map(n => {
+    const m = scale(n, size);
+    m.luck = luck(brains, m.brains);
+    return m;
+  });
+  rows.sort((a,b) => {
+    let x = a[sortK], y = b[sortK];
+    if(typeof x === 'string') return sortAsc ? x.localeCompare(y) : y.localeCompare(x);
+    return sortAsc ? x-y : y-x;
+  });
+  const tb = document.querySelector('#montbl tbody');
+  tb.innerHTML = rows.map(m => {
+    const c = m.luck < 0 ? 'd' : cls(m.luck);
+    const pct = m.luck < 0 ? '—' : (m.luck*100).toFixed(0)+'%';
+    const notes = (m.specials||[]).map(s => NOTES[s] ? NOTES[s].split(':')[0] : s)
+                                  .filter(Boolean).join(', ');
+    return `<tr>
+      <td>${esc(m.name)}</td>
+      <td class="d">${m.brains|0}<span class="d" style="font-size:11px"> (${m.base_brains})</span></td>
+      <td class="pct ${c}">${pct}</td>
+      <td class="d">${m.energy|0}</td>
+      <td class="d">${m.strength|0}</td>
+      <td class="d">${m.experience|0}</td>
+      <td class="d" style="font-size:11px">${esc(notes)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ---- what-if ----
+$('c-live').onchange = e => {
+  $('c-manual').style.display = e.target.checked ? 'none' : 'flex';
+  drawCalc();
+};
+['c-mon','c-size','c-br','c-st','c-en','c-mn','c-ml','c-sw'].forEach(id => {
+  const el = $(id); if(el) el.oninput = drawCalc;
+});
+
+function drawCalc(){
+  const sel = $('c-mon');
+  if(!sel.options.length){
+    sel.innerHTML = Object.keys(MONS).sort()
+      .map(n => `<option>${esc(n)}</option>`).join('');
+  }
+  const name = sel.value || Object.keys(MONS)[0];
+  const size = Math.max(1, parseInt($('c-size').value) || 1);
+  const m = scale(name, size);
+  if(!m){ $('calcout').innerHTML = ''; return; }
+
+  const live = $('c-live').checked;
+  const p = live && LAST ? LAST : {
+    brains:+$('c-br').value, strength:+$('c-st').value, energy:+$('c-en').value,
+    max_energy:+$('c-en').value, mana:+$('c-mn').value, magiclvl:+$('c-ml').value,
+    sword:+$('c-sw').value, quickness:35,
+  };
+
+  const lo = luck(p.brains, m.brains);
+  const might = p.strength * (1 + Math.sqrt(Math.max(0,p.sword))*0.04);
+  const swings = Math.ceil(m.energy / (might*1.15));
+  const incoming = 1 + m.strength/2;
+  const aon = m.experience>0 && p.magiclvl>0
+    ? Math.min(1, 3000*p.magiclvl/(m.experience + 10000*p.magiclvl)) : 0;
+  const boltDmg = p.magiclvl >= 5 ? p.mana * 1.0 * (Math.pow(p.magiclvl,0.4)+1) : 0;
+  // exact mana to guarantee a kill: hp / (0.7 * (ML^0.4 + 1))
+  const boltNeed = p.magiclvl >= 5
+    ? Math.ceil(m.energy / (0.7 * (Math.pow(p.magiclvl,0.4)+1)))
+    : 0;
+
+  const c = lo<0 ? 'd' : cls(lo);
+  $('calcout').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div>
+        <div class="muted" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Monster @ size ${size}</div>
+        <div class="stat"><span class="muted">Energy</span><b>${m.energy|0}</b></div>
+        <div class="stat"><span class="muted">Strength</span><b>${m.strength|0}</b></div>
+        <div class="stat"><span class="muted">Brains</span><b>${m.brains|0} <span class="d">(base ${m.base_brains})</span></b></div>
+        <div class="stat"><span class="muted">Experience</span><b>${m.experience|0}</b></div>
+      </div>
+      <div>
+        <div class="muted" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px">Your options</div>
+        <div class="stat"><span class="muted">Luckout</span><b class="${c}">${lo<0?'—':(lo*100).toFixed(0)+'%'}</b></div>
+        <div class="stat"><span class="muted">All-or-Nothing</span><b>${(aon*100).toFixed(0)}%</b></div>
+        <div class="stat"><span class="muted">Melee / swing</span><b>~${(might*1.15).toFixed(0)}</b></div>
+        <div class="stat"><span class="muted">Swings to kill</span><b>${swings}</b></div>
+        <div class="stat"><span class="muted">Its damage / hit</span><b>~${incoming.toFixed(0)}</b></div>
+        <div class="stat"><span class="muted">Full bolt</span><b>${boltDmg ? '~'+boltDmg.toFixed(0) : 'locked (ML 5)'}</b></div>
+        <div class="stat"><span class="muted">Mana to 1-shot</span><b class="${boltNeed && boltNeed<=p.mana ? 'g':'r'}">${boltNeed ? boltNeed + (boltNeed>p.mana ? ' (short '+(boltNeed-(p.mana|0))+')' : '') : '—'}</b></div>
+      </div>
+    </div>
+    <div style="margin-top:12px" class="muted">
+      Trading ~${swings} rounds means taking roughly
+      <b>${(swings*incoming).toFixed(0)}</b> damage on the way in
+      — you have <b>${p.energy|0}</b>.
+    </div>
+    ${(m.specials||[]).map(s => NOTES[s] ? `<div class="warn" style="margin-top:8px">${esc(NOTES[s])}</div>` : '').join('')}
+  `;
+}
+
+// spell table
+$('spelltbl').innerHTML = SPELLS.map(([n,l,c]) =>
+  `<tr><td class="act">${n}</td><td>${l}</td><td class="d">${c}</td></tr>`).join('');
+
+poll();
+setInterval(poll, 900);
+</script>
+</body>
+</html>
