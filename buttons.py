@@ -152,7 +152,8 @@ class ButtonOverlay:
             return
         sig = (self.data.get("fight", {}).get("name"), move, mv.get("arg"))
         now = time.monotonic()
-        if sig == self._sig or now - self._last_press_at < AUTOPRESS_COOLDOWN:
+        same_lit_button = sig == self._sig
+        if same_lit_button and now - self._last_press_at < AUTOPRESS_COOLDOWN:
             return
         self._sig = sig
         self._last_press_at = now
