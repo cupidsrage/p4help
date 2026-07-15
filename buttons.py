@@ -45,6 +45,7 @@ AUTO_PRESS = (
     not in {"0", "false", "no", "off"}
 )
 KEY_DEBOUNCE_S = 0.35
+KEY_REPEAT_S = 1.25
 BOLT_TYPE_DELAY_S = 0.35
 
 BG    = "#16130e"
@@ -258,9 +259,12 @@ class ButtonOverlay:
     def _press_key(self, num, sig, *, repeat_same=False):
         """Tap the number key matching the lit button.
 
-        Normal combat actions are sent once per recommendation. Repeating prompts
-        like More must be allowed through after the debounce because the visible
-        button text can stay identical across multiple pages.
+        Normal combat actions are sent when the recommendation changes, then
+        retried at a conservative interval while the same prompt remains visible.
+        Combat rounds often reuse the same labels/recommendation, so treating an
+        identical signature as permanently handled can leave the overlay lit but
+        no longer pressing. Repeating prompts like More still use only the short
+        debounce because the visible button text can stay identical across pages.
         """
         if not self._autopress or num is None:
             return
@@ -268,7 +272,8 @@ class ButtonOverlay:
         if now - self._last_press_at < KEY_DEBOUNCE_S:
             return
         if not repeat_same and sig == self._last_press_sig:
-            return
+            if now - self._last_press_at < KEY_REPEAT_S:
+                return
         if not 1 <= int(num) <= 8:
             return
 
