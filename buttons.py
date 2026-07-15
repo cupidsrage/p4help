@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Button overlay — lights up the button you should press.
+Button overlay — lights up and presses the button you should press.
 
 A small always-on-top grid that mirrors the game's 8 action buttons. The
-advisor's recommended move is lit GREEN so you can't miss it. For spells it
-walks you through the sub-steps (Spell -> Magic Bolt -> type amount), and for
-bolt it shows the exact mana to one-shot the monster.
+advisor's recommended move is lit GREEN so you can't miss it, and the matching
+number key is tapped once when the recommendation changes. For spells it walks
+you through the sub-steps (Spell -> Magic Bolt -> type amount), and for bolt it
+shows the exact mana to one-shot the monster.
 
     python buttons.py
 
-Reads the same proxy feed as the main overlay (127.0.0.1:8420/state). Never
-touches the game.
+Reads the same proxy feed as the main overlay (127.0.0.1:8420/state).
 
 BUTTON LAYOUT (verified from fight.c:826 and :2155):
 
@@ -26,7 +26,13 @@ Controls: drag to move, right-click to close, F9 hide/show.
 import tkinter as tk
 from tkinter import font as tkfont
 import json
+import ctypes
+from ctypes import wintypes
+import os
 import queue
+import subprocess
+import sys
+import time
 import threading
 import urllib.request
 import urllib.error
@@ -34,6 +40,11 @@ import urllib.error
 POLL_URL = "http://127.0.0.1:8420/state"
 POLL_MS = 400
 PAINT_MS = 100
+AUTO_PRESS = (
+    os.environ.get("P4HELP_BUTTONS_AUTO_PRESS", "1").lower()
+    not in {"0", "false", "no", "off"}
+)
+KEY_DEBOUNCE_S = 0.35
 
 BG    = "#16130e"
 PANEL = "#211c14"
@@ -94,6 +105,8 @@ class ButtonOverlay:
         self.alive = True
         self._hidden = False
         self._sig = None
+        self._last_press_sig = None
+        self._last_press_at = 0.0
         self._flash = 0
 
         self._build()
@@ -223,6 +236,82 @@ class ButtonOverlay:
         c["label"].configure(bg=color, fg="#0c0a07")
         c["num"].configure(bg=color, fg="#0c0a07")
 
+
+    def _press_key(self, num, sig):
+        """Tap the number key matching the lit button once per game state."""
+        if not AUTO_PRESS or num is None:
+            return
+        now = time.monotonic()
+        if (sig == self._last_press_sig
+                or now - self._last_press_at < KEY_DEBOUNCE_S):
+            return
+        if not 1 <= int(num) <= 8:
+            return
+
+        key = str(num)
+        sent = False
+        if sys.platform.startswith("win"):
+            sent = self._send_windows_key(key)
+        if not sent:
+            sent = self._send_external_key(key)
+
+        if sent:
+            self._last_press_sig = sig
+            self._last_press_at = now
+
+    def _send_external_key(self, key):
+        """Send a real number-key tap on non-Windows systems when xdotool exists."""
+        try:
+            return subprocess.run(
+                ["xdotool", "key", key],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            ).returncode == 0
+        except OSError:
+            return False
+
+    def _send_windows_key(self, key):
+        """Send a real number-key tap on Windows without external packages."""
+        try:
+            INPUT_KEYBOARD = 1
+            KEYEVENTF_KEYUP = 0x0002
+            vk = ord(key)
+
+            class KEYBDINPUT(ctypes.Structure):
+                _fields_ = [
+                    ("wVk", wintypes.WORD),
+                    ("wScan", wintypes.WORD),
+                    ("dwFlags", wintypes.DWORD),
+                    ("time", wintypes.DWORD),
+                    ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+                ]
+
+            class INPUTUNION(ctypes.Union):
+                _fields_ = [("ki", KEYBDINPUT)]
+
+            class INPUT(ctypes.Structure):
+                _fields_ = [("type", wintypes.DWORD), ("union", INPUTUNION)]
+
+            extra = ctypes.c_ulong(0)
+            inputs = (INPUT * 2)(
+                INPUT(
+                    INPUT_KEYBOARD,
+                    INPUTUNION(KEYBDINPUT(vk, 0, 0, 0, ctypes.pointer(extra))),
+                ),
+                INPUT(
+                    INPUT_KEYBOARD,
+                    INPUTUNION(
+                        KEYBDINPUT(
+                            vk, 0, KEYEVENTF_KEYUP, 0, ctypes.pointer(extra)
+                        )
+                    ),
+                ),
+            )
+            return ctypes.windll.user32.SendInput(2, inputs, ctypes.sizeof(INPUT)) == 2
+        except Exception:
+            return False
+
     def _button_texts(self):
         """Return the currently visible game button labels, normalized."""
         return [str(b).strip().lower() for b in (self.data.get("buttons") or [])]
@@ -252,6 +341,7 @@ class ButtonOverlay:
             self._reset_cells()
             col = GREEN if self._flash else GREEN_HI
             self._light(1, col, GREEN_HI)
+            self._press_key(1, ("more", tuple(self._button_texts())))
             self.hint.configure(text="Press 1 — More", fg=GREEN_HI)
             self.sub.configure(text="clear the text to continue")
             return
@@ -289,6 +379,11 @@ class ButtonOverlay:
             self._layout(spell_mode)
             col = GREEN if self._flash else GREEN_HI
             self._light(current_num, col, GREEN_HI)
+            self._press_key(
+                current_num,
+                ("fight", f.get("name"), move, mv.get("arg"),
+                 spell_mode, current_num),
+            )
 
             if move == "bolt" and mv.get("arg"):
                 amt = int(mv["arg"])
@@ -309,6 +404,9 @@ class ButtonOverlay:
             self._layout(False)
             col = GREEN if self._flash else GREEN_HI
             self._light(num, col, GREEN_HI)
+            self._press_key(
+                num, ("fight", f.get("name"), move, mv.get("arg"), False, num)
+            )
             title = self.cells[num]["base"]
             self.hint.configure(text=f"{title}  →  button {num}", fg=GREEN_HI)
             odds = f"{mv['win']*100:.0f}% win"
