@@ -223,6 +223,23 @@ class ButtonOverlay:
         c["label"].configure(bg=color, fg="#0c0a07")
         c["num"].configure(bg=color, fg="#0c0a07")
 
+    def _button_texts(self):
+        """Return the currently visible game button labels, normalized."""
+        return [str(b).strip().lower() for b in (self.data.get("buttons") or [])]
+
+    def _spell_menu_visible(self):
+        """True when the actual game buttons are showing the spell submenu."""
+        btns = self._button_texts()
+        return any(
+            label in btns
+            for label in ("magic bolt", "all or nothing", "force field", "transform")
+        )
+
+    def _more_prompt_visible(self):
+        """True when the first game button is the More prompt."""
+        btns = self._button_texts()
+        return bool(btns and btns[0] == "more")
+
     def _update(self):
         d = self.data
         f = d.get("fight")
@@ -230,8 +247,7 @@ class ButtonOverlay:
         # HIGHEST PRIORITY: if the game is showing a "More" prompt, nothing else
         # works until you clear it. Button 1 == "More". Tell the player to press
         # it, overriding any stale combat recommendation.
-        btns = d.get("buttons") or []
-        if btns and btns[0].strip().lower() == "more":
+        if self._more_prompt_visible():
             self._layout(False)
             self._reset_cells()
             col = GREEN if self._flash else GREEN_HI
@@ -261,22 +277,30 @@ class ButtonOverlay:
 
         label, num, sub = info
 
-        # spell moves: two-step. Show step 1 (Spell) then the sub-button.
+        # spell moves: two-step. When the game is still on the combat menu,
+        # flash Spell (4). Once the spell submenu is actually visible, switch
+        # the grid and flash the submenu key instead. This keeps the highlighted
+        # key matched to the button the player can press right now, including
+        # after clearing an intervening More prompt.
         if sub is not None:
-            self._layout(False)
-            # flash the Spell button
-            col = GREEN if self._flash else GREEN_HI
-            self._light(4, col, GREEN_HI)
+            spell_mode = self._spell_menu_visible()
             sub_label, sub_num = sub
+            current_num = sub_num if spell_mode and sub_num is not None else 4
+            self._layout(spell_mode)
+            col = GREEN if self._flash else GREEN_HI
+            self._light(current_num, col, GREEN_HI)
+
             if move == "bolt" and mv.get("arg"):
                 amt = int(mv["arg"])
                 self.hint.configure(
-                    text=f"BOLT — {amt} mana", fg=GREEN_HI)
+                    text=f"Press {current_num} — BOLT ({amt} mana)",
+                    fg=GREEN_HI)
                 self.sub.configure(
-                    text=f"① press Spell (4)   ② Magic Bolt (2)   "
+                    text=f"① Spell (4)   ② Magic Bolt (2)   "
                          f"③ type {amt}")
             else:
-                self.hint.configure(text=f"{sub_label}", fg=GREEN_HI)
+                self.hint.configure(text=f"Press {current_num} — {sub_label}",
+                                    fg=GREEN_HI)
                 s = f"① Spell (4)   ② {sub_label}"
                 if sub_num:
                     s += f" ({sub_num})"
