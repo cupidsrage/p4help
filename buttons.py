@@ -20,7 +20,7 @@ BUTTON LAYOUT (verified from fight.c:826 and :2155):
     3 Nick       7 Evade           5 Force Field
     4 Spell      8 Use Ring        8 Transform
 
-Controls: drag to move, right-click to close, F9 hide/show.
+Controls: drag to move, right-click to close, F9 hide/show, F8 auto-press on/off.
 """
 
 import tkinter as tk
@@ -45,6 +45,7 @@ AUTO_PRESS = (
     not in {"0", "false", "no", "off"}
 )
 KEY_DEBOUNCE_S = 0.35
+BOLT_TYPE_DELAY_S = 0.35
 
 BG    = "#16130e"
 PANEL = "#211c14"
@@ -107,6 +108,7 @@ class ButtonOverlay:
         self._sig = None
         self._last_press_sig = None
         self._last_press_at = 0.0
+        self._autopress = AUTO_PRESS
         self._flash = 0
 
         self._build()
@@ -125,7 +127,15 @@ class ButtonOverlay:
         self.bar.pack_propagate(False)
         tk.Label(self.bar, text="PRESS THIS", bg="#0f0d09", fg=GREEN,
                  font=self.f_tiny).pack(side="left", padx=8)
-        tk.Label(self.bar, text="F9 hide", bg="#0f0d09", fg=DIM,
+        self.auto_lbl = tk.Label(
+            self.bar,
+            text="AUTO ON" if self._autopress else "AUTO OFF",
+            bg="#0f0d09",
+            fg=GREEN if self._autopress else RED,
+            font=self.f_tiny,
+        )
+        self.auto_lbl.pack(side="right", padx=8)
+        tk.Label(self.bar, text="F8 auto  F9 hide", bg="#0f0d09", fg=DIM,
                  font=self.f_tiny).pack(side="right", padx=8)
 
         # top hint line: the move + bolt amount / sub-steps
@@ -160,6 +170,7 @@ class ButtonOverlay:
             w.bind("<Button-1>", self._grab)
             w.bind("<B1-Motion>", self._drag)
         self.root.bind("<F9>", lambda e: self._toggle())
+        self.root.bind("<F8>", lambda e: self._toggle_autopress())
         self.root.bind("<Escape>", lambda e: self._quit())
         self.root.bind("<Button-3>", self._menu)
 
@@ -174,6 +185,13 @@ class ButtonOverlay:
     def _toggle(self):
         self.root.withdraw() if not self._hidden else self.root.deiconify()
         self._hidden = not self._hidden
+
+    def _toggle_autopress(self):
+        self._autopress = not self._autopress
+        self.auto_lbl.configure(
+            text="AUTO ON" if self._autopress else "AUTO OFF",
+            fg=GREEN if self._autopress else RED,
+        )
 
     def _menu(self, e):
         m = tk.Menu(self.root, tearoff=0)
@@ -237,13 +255,19 @@ class ButtonOverlay:
         c["num"].configure(bg=color, fg="#0c0a07")
 
 
-    def _press_key(self, num, sig):
-        """Tap the number key matching the lit button once per game state."""
-        if not AUTO_PRESS or num is None:
+    def _press_key(self, num, sig, *, repeat_same=False):
+        """Tap the number key matching the lit button.
+
+        Normal combat actions are sent once per recommendation. Repeating prompts
+        like More must be allowed through after the debounce because the visible
+        button text can stay identical across multiple pages.
+        """
+        if not self._autopress or num is None:
             return
         now = time.monotonic()
-        if (sig == self._last_press_sig
-                or now - self._last_press_at < KEY_DEBOUNCE_S):
+        if now - self._last_press_at < KEY_DEBOUNCE_S:
+            return
+        if not repeat_same and sig == self._last_press_sig:
             return
         if not 1 <= int(num) <= 8:
             return
@@ -259,11 +283,42 @@ class ButtonOverlay:
             self._last_press_sig = sig
             self._last_press_at = now
 
+    def _type_text_then_enter(self, text):
+        """Type a short value and press Enter after a submenu key opens a prompt."""
+        if not self._autopress:
+            return
+
+        def worker():
+            time.sleep(BOLT_TYPE_DELAY_S)
+            if sys.platform.startswith("win"):
+                for ch in str(text):
+                    self._send_windows_key(ch)
+                    time.sleep(0.02)
+                self._send_windows_enter()
+            else:
+                try:
+                    subprocess.run(
+                        ["xdotool", "type", "--clearmodifiers", str(text)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                    )
+                    subprocess.run(
+                        ["xdotool", "key", "--clearmodifiers", "Return"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                    )
+                except OSError:
+                    return
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def _send_external_key(self, key):
         """Send a real number-key tap on non-Windows systems when xdotool exists."""
         try:
             return subprocess.run(
-                ["xdotool", "key", key],
+                ["xdotool", "key", "--clearmodifiers", key],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 check=False,
@@ -308,7 +363,21 @@ class ButtonOverlay:
                     ),
                 ),
             )
-            return ctypes.windll.user32.SendInput(2, inputs, ctypes.sizeof(INPUT)) == 2
+            sent = ctypes.windll.user32.SendInput(2, inputs, ctypes.sizeof(INPUT)) == 2
+            if sent:
+                return True
+            ctypes.windll.user32.keybd_event(vk, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
+            return True
+        except Exception:
+            return False
+
+    def _send_windows_enter(self):
+        try:
+            vk_return = 0x0D
+            ctypes.windll.user32.keybd_event(vk_return, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(vk_return, 0, 0x0002, 0)
+            return True
         except Exception:
             return False
 
@@ -341,7 +410,7 @@ class ButtonOverlay:
             self._reset_cells()
             col = GREEN if self._flash else GREEN_HI
             self._light(1, col, GREEN_HI)
-            self._press_key(1, ("more", tuple(self._button_texts())))
+            self._press_key(1, ("more", tuple(self._button_texts())), repeat_same=True)
             self.hint.configure(text="Press 1 — More", fg=GREEN_HI)
             self.sub.configure(text="clear the text to continue")
             return
@@ -379,11 +448,13 @@ class ButtonOverlay:
             self._layout(spell_mode)
             col = GREEN if self._flash else GREEN_HI
             self._light(current_num, col, GREEN_HI)
-            self._press_key(
-                current_num,
-                ("fight", f.get("name"), move, mv.get("arg"),
-                 spell_mode, current_num),
+            press_sig = (
+                "fight", f.get("name"), move, mv.get("arg"),
+                spell_mode, current_num,
             )
+            previous_sig = self._last_press_sig
+            self._press_key(current_num, press_sig)
+            pressed_now = self._last_press_sig == press_sig and previous_sig != press_sig
 
             if move == "bolt" and mv.get("arg"):
                 amt = int(mv["arg"])
@@ -393,6 +464,8 @@ class ButtonOverlay:
                 self.sub.configure(
                     text=f"① Spell (4)   ② Magic Bolt (2)   "
                          f"③ type {amt}")
+                if spell_mode and current_num == 2 and pressed_now:
+                    self._type_text_then_enter(amt)
             else:
                 self.hint.configure(text=f"Press {current_num} — {sub_label}",
                                     fg=GREEN_HI)
