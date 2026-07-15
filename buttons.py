@@ -24,7 +24,7 @@ Controls: drag to move, right-click to close, F9 hide/show, F8 auto-press on/off
 
 Auto-press sends the matching number key to the active game window instead of
 clicking the overlay or the game button with the mouse. For spells it presses
-4 for Spell, then the spell submenu number, and types the bolt mana amount
+4 for Spell, then the spell submenu number, types the bolt mana amount, and presses Enter
 when needed.
 """
 
@@ -142,6 +142,18 @@ class ButtonOverlay:
         except Exception:
             return False
 
+    def _press_enter_key(self):
+        if not sys.platform.startswith("win"):
+            return False
+        try:
+            import ctypes
+            vk_return = 0x0D
+            ctypes.windll.user32.keybd_event(vk_return, 0, 0, 0)
+            ctypes.windll.user32.keybd_event(vk_return, 0, 0x0002, 0)
+            return True
+        except Exception:
+            return False
+
     def _toggle_autopress(self):
         self._autopress = not self._autopress
         self.auto_lbl.configure(text="AUTO ON" if self._autopress else "AUTO OFF",
@@ -170,6 +182,8 @@ class ButtonOverlay:
             if move == "bolt" and mv.get("arg"):
                 time.sleep(AUTOPRESS_DELAY)
                 self._type_text(int(mv["arg"]))
+                time.sleep(0.05)
+                self._press_enter_key()
 
         threading.Thread(target=worker, daemon=True).start()
 
