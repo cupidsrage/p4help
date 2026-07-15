@@ -109,6 +109,7 @@ class ButtonOverlay:
         self._sig = None
         self._last_press_sig = None
         self._last_press_at = 0.0
+        self._last_bolt_type_sig = None
         self._autopress = AUTO_PRESS
         self._flash = 0
 
@@ -259,6 +260,8 @@ class ButtonOverlay:
     def _press_key(self, num, sig, *, repeat_same=False):
         """Tap the number key matching the lit button.
 
+        Returns True only when a key was actually sent.
+
         Normal combat actions are sent when the recommendation changes, then
         retried at a conservative interval while the same prompt remains visible.
         Combat rounds often reuse the same labels/recommendation, so treating an
@@ -267,15 +270,15 @@ class ButtonOverlay:
         debounce because the visible button text can stay identical across pages.
         """
         if not self._autopress or num is None:
-            return
+            return False
         now = time.monotonic()
         if now - self._last_press_at < KEY_DEBOUNCE_S:
-            return
+            return False
         if not repeat_same and sig == self._last_press_sig:
             if now - self._last_press_at < KEY_REPEAT_S:
-                return
+                return False
         if not 1 <= int(num) <= 8:
-            return
+            return False
 
         key = str(num)
         sent = False
@@ -287,6 +290,7 @@ class ButtonOverlay:
         if sent:
             self._last_press_sig = sig
             self._last_press_at = now
+        return sent
 
     def _type_text_then_enter(self, text):
         """Type a short value and press Enter after a submenu key opens a prompt."""
@@ -457,9 +461,7 @@ class ButtonOverlay:
                 "fight", f.get("name"), move, mv.get("arg"),
                 spell_mode, current_num,
             )
-            previous_sig = self._last_press_sig
-            self._press_key(current_num, press_sig)
-            pressed_now = self._last_press_sig == press_sig and previous_sig != press_sig
+            pressed_now = self._press_key(current_num, press_sig)
 
             if move == "bolt" and mv.get("arg"):
                 amt = int(mv["arg"])
@@ -469,7 +471,16 @@ class ButtonOverlay:
                 self.sub.configure(
                     text=f"① Spell (4)   ② Magic Bolt (2)   "
                          f"③ type {amt}")
-                if spell_mode and current_num == 2 and pressed_now:
+                bolt_type_sig = (
+                    f.get("name"), mv.get("arg"), tuple(self._button_texts())
+                )
+                if (
+                    spell_mode
+                    and current_num == 2
+                    and pressed_now
+                    and self._last_bolt_type_sig != bolt_type_sig
+                ):
+                    self._last_bolt_type_sig = bolt_type_sig
                     self._type_text_then_enter(amt)
             else:
                 self.hint.configure(text=f"Press {current_num} — {sub_label}",
