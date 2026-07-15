@@ -88,6 +88,7 @@ STATE = {
     "trove": None,
     "zone": None,
     "log": [],
+    "buttons": [],
 }
 LOCK = threading.Lock()
 
@@ -213,6 +214,9 @@ class Tracker:
                 self.push_zone()
         elif hdr == RING:
             p.ring = (lines[0].strip().lower() == "yes")
+        elif hdr in (BUTTONS, FULL_BUTTONS):
+            with LOCK:
+                STATE["buttons"] = [line.strip() for line in lines]
         elif hdr == WRITE_LINE:
             self._text(lines[0] if lines else "")
         elif hdr == PLAYER_INFO:
