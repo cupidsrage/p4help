@@ -73,6 +73,16 @@ TARGET_ROLLS = 100   # pickiness: ~this many rolls on average to hit the bar
 HARD_STOP = 500      # never roll more than this for one character
 
 
+def class_name(label):
+    """Our class name for a game button label ("Magic-User" -> "Magic User"),
+    or None if the label isn't a class."""
+    norm = label.replace("-", " ").strip().lower()
+    for c in RANGES:
+        if c.lower() == norm:
+            return c
+    return None
+
+
 def fitting_classes(stats):
     """Every class whose ranges contain all of the rolled values."""
     return {c for c, rng in RANGES.items()
@@ -128,7 +138,8 @@ class RollJudge:
         return self._bar[cls]
 
     def decide(self, roll):
-        """roll = {"char": id, "n": int, "stats": {...}, "class": str|None}.
+        """roll = {"char": id, "n": int, "stats": {...}, "class": str|None,
+        "class_options": [classes the player's click could mean] | None}.
         "char" changes for each new character being rolled; "n" counts that
         character's rolls from 1.
         Returns {"action": "reroll"|"keep", "class", "score", "need",
@@ -147,6 +158,9 @@ class RollJudge:
         # Ranges overlap between classes, but every roll of one character
         # comes from the same class: narrow the candidates roll by roll.
         fits = fitting_classes(stats)
+        picked = {class_name(c) or c for c in (roll.get("class_options") or [])}
+        if picked and (picked & fits):
+            fits = picked & fits        # what the player clicked, if it fits
         self.cands = (self.cands & fits) or fits
         if (len(self.recent) == 3 and len(set(self.recent)) == 1
                 and "Experimento" in self.cands):

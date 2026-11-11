@@ -27,6 +27,12 @@ panel docked on the right. Close the window and everything shuts down.
   game for you: combat moves, the Spell → Magic Bolt → mana steps, and "More"
   prompts. It only types while the launcher window is in front, so alt-tabbing
   away pauses it. It's off by default and remembers your choice.
+- **Auto-reroll (new characters):** pick your class, and on the "keep these
+  stats?" screen auto-play rerolls until it gets a roll in about the top 1-in-100
+  for that class (ranges from phantasia5.com/stats), then presses Keep. The grid
+  shows each roll's score and the bar. Change how picky it is with
+  `"reroll_target"` in `launcher.json` (default 100; 300 = pickier and slower), and
+  what counts as good with `"reroll_weights"`, e.g. `{"Halfling": {"brains": 5}}`.
 - **Recording (for teaching auto-play):** while **● Recording** is on, the launcher
   saves every screen you answer and what you pressed, plus your stats, the fight and
   the advisor's pick, to `recordings/` (one `.jsonl` dataset + readable `.txt` per
@@ -143,6 +149,7 @@ turns unspendable mana into hundreds of damage.
 
 - `launcher.py` — the all-in-one app window (run this, or `Phantasia.bat`)
 - `app.py` — proxy + web server + packet parser
+- `reroll.py` — scores character rolls and decides Reroll/Keep
 - `recorder.py` — records screens + your inputs; `analyze.py` — summarises them
 - `ui.html` — the dashboard
 - `combat.py` — combat engine ported from `fight.c`

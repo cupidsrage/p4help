@@ -37,6 +37,8 @@ import threading
 import urllib.request
 import urllib.error
 
+import reroll
+
 POLL_URL = "http://127.0.0.1:8420/state"
 POLL_MS = 400
 PAINT_MS = 100
@@ -47,6 +49,10 @@ AUTO_PRESS = (
 KEY_DEBOUNCE_S = 0.35
 KEY_REPEAT_S = 1.25
 BOLT_TYPE_DELAY_S = 0.35
+# A reroll repeats only if the same roll is STILL on screen this long after
+# pressing (the key got lost). Shorter would risk rerolling the next roll
+# before it's been judged.
+ROLL_REPEAT_S = 3.0
 
 BG    = "#16130e"
 PANEL = "#211c14"
@@ -88,7 +94,7 @@ MOVE_TO_BUTTON = {
 
 class ButtonOverlay:
     def __init__(self, parent=None, autopress=None, before_press=None,
-                 on_autopress_change=None):
+                 on_autopress_change=None, reroll_opts=None):
         """parent=None: standalone floating window.
 
         parent=<Frame>: render inside that frame (launcher.py docks it beside
@@ -126,6 +132,8 @@ class ButtonOverlay:
         self._last_bolt_type_sig = None
         self._autopress = AUTO_PRESS if autopress is None else bool(autopress)
         self._flash = 0
+        # character creation: Reroll until the stats are top-tier for the class
+        self.judge = reroll.RollJudge(**(reroll_opts or {}))
 
         self._build()
         if not self.embedded:
@@ -288,7 +296,7 @@ class ButtonOverlay:
         c["num"].configure(bg=color, fg="#0c0a07")
 
 
-    def _press_key(self, num, sig, *, repeat_same=False):
+    def _press_key(self, num, sig, *, repeat_same=False, repeat_s=KEY_REPEAT_S):
         """Tap the number key matching the lit button.
 
         Returns True only when a key was actually sent.
@@ -306,7 +314,7 @@ class ButtonOverlay:
         if now - self._last_press_at < KEY_DEBOUNCE_S:
             return False
         if not repeat_same and sig == self._last_press_sig:
-            if now - self._last_press_at < KEY_REPEAT_S:
+            if now - self._last_press_at < repeat_s:
                 return False
         if not 1 <= int(num) <= 8:
             return False
@@ -442,6 +450,42 @@ class ButtonOverlay:
         btns = self._button_texts()
         return bool(btns and btns[0] == "more")
 
+    def _show_labels(self, labels):
+        """Show the game's actual button labels in the grid."""
+        for num in range(1, 9):
+            text = labels[num - 1] if num - 1 < len(labels) else ""
+            c = self.cells[num]
+            if c["base"] != text:
+                c["label"].configure(text=text)
+                c["base"] = text
+
+    def _roll_screen(self, roll, labels):
+        dec = self.judge.decide(roll)
+        self._show_labels(labels)
+        self._reset_cells()
+        n, cls = roll.get("n"), dec.get("class") or "?"
+        if dec["action"] is None:
+            self.hint.configure(text=f"Roll {n}: can't judge", fg=AMBER)
+            self.sub.configure(text=dec["why"])
+            return
+        want = dec["action"]                       # "reroll" or "keep"
+        low = [b.strip().lower() for b in labels]
+        num = low.index(want) + 1 if want in low else None
+        col = GREEN if self._flash else GREEN_HI
+        if num:
+            self._light(num, col, GREEN_HI)
+            self._press_key(num, ("roll", roll.get("char"), n, want),
+                            repeat_s=ROLL_REPEAT_S)
+        verb = "KEEP" if want == "keep" else "Reroll"
+        self.hint.configure(text=f"Roll {n} \u00b7 {cls} \u2192 {verb}"
+                                 + (f" ({num})" if num else ""),
+                            fg=GREEN_HI if want == "keep" else INK)
+        if dec["score"] is not None and dec["need"] is not None:
+            self.sub.configure(text=f"score {dec['score']:.2f} / keep at "
+                                    f"{dec['need']:.2f} \u00b7 {dec['why']}")
+        else:
+            self.sub.configure(text=dec["why"])
+
     def _update(self):
         d = self.data
         f = d.get("fight")
@@ -457,6 +501,13 @@ class ButtonOverlay:
             self._press_key(1, ("more", tuple(self._button_texts())), repeat_same=True)
             self.hint.configure(text="Press 1 — More", fg=GREEN_HI)
             self.sub.configure(text="clear the text to continue")
+            return
+
+        # Character creation: "Do you wish to keep these stats?"
+        roll = d.get("roll")
+        btns = self._button_texts()
+        if roll and "reroll" in btns and "keep" in btns:
+            self._roll_screen(roll, d.get("buttons") or [])
             return
 
         if not f or not f.get("name") or not f.get("moves"):
