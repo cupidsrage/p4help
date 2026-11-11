@@ -10,7 +10,30 @@ No repo, no Discord, no sharing in-realm.
 
 ---
 
-## Run it
+## Run it (one window, game inside)
+
+Double-click **Phantasia.bat** (or `pythonw launcher.py`).
+
+One window opens. It starts the proxy and dashboard in the background, launches
+the game client, and pulls the client **inside** the window, with the advisor
+panel docked on the right. Close the window and everything shuts down.
+
+- **First run:** it asks you to pick the game client (.exe, .jar, .bat or
+  shortcut). The choice is saved to `launcher.json`. Change it with **Client…**.
+- **Toolbar:** Relaunch game · Client… · Dashboard (full UI in the browser) ·
+  Hide/Show advisor.
+- **Want a real app?** Run `build_exe.bat` once (needs `pip install pyinstaller`)
+  to get `dist\Phantasia.exe`. Pin it or put it on your desktop.
+- The **hosts-file entry below is still needed**. The launcher warns you if it's missing.
+- Embedding the client needs Windows. Elsewhere, the client runs in its own window
+  next to the advisor.
+
+`launcher.json` options: `client`, `client_args`, `server` (upstream IP),
+`window_title` (set this to part of the client's title bar text if the launcher
+can't find its window), `stretch` (fill the space or keep native size),
+`panel_width`, `close_client_on_exit`.
+
+## Run it (proxy only)
 
 ```
 python app.py -h 178.63.136.86
@@ -98,7 +121,8 @@ turns unspendable mana into hundreds of damage.
 
 ## Files
 
-- `app.py` — proxy + web server + packet parser (run this)
+- `launcher.py` — the all-in-one app window (run this, or `Phantasia.bat`)
+- `app.py` — proxy + web server + packet parser
 - `ui.html` — the dashboard
 - `combat.py` — combat engine ported from `fight.c`
 - `monsters.py` — full monster table with size scaling and specials

@@ -755,27 +755,35 @@ def handle(client):
     print("  · client disconnected")
 
 
-def main():
+def parse_args(a):
     global SERVER_HOST, SERVER_PORT, LISTEN_PORT, WEB_PORT, RAW_LOG
-    a = sys.argv[1:]
     if "-h" in a: SERVER_HOST = a[a.index("-h") + 1]
     if "-p" in a: SERVER_PORT = int(a[a.index("-p") + 1])
     if "-l" in a: LISTEN_PORT = int(a[a.index("-l") + 1])
     if "-w" in a: WEB_PORT = int(a[a.index("-w") + 1])
     if "--log" in a: RAW_LOG = a[a.index("--log") + 1]
 
+
+def start(open_browser=True, background=False):
+    """Start the dashboard + proxy.
+
+    background=False blocks forever in the accept loop (CLI use).
+    background=True runs everything on daemon threads and returns, so the
+    launcher (launcher.py) can host the proxy inside its own window.
+    Raises OSError if the proxy port is already taken.
+    """
     # ThreadingHTTPServer, NOT HTTPServer: the plain one handles a single
     # request at a time. With the dashboard polling AND the overlay polling
     # (plus keep-alive holding connections open), requests queue up behind
     # each other and eventually just time out. This was why the UI went dead.
-    web = ThreadingHTTPServer(("127.0.0.1", WEB_PORT), Web)
-    web.daemon_threads = True
-    threading.Thread(target=web.serve_forever, daemon=True).start()
-
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind((LISTEN_HOST, LISTEN_PORT))
     s.listen(4)
+
+    web = ThreadingHTTPServer(("127.0.0.1", WEB_PORT), Web)
+    web.daemon_threads = True
+    threading.Thread(target=web.serve_forever, daemon=True).start()
 
     url = f"http://127.0.0.1:{WEB_PORT}"
     print("\n  PHANTASIA ADVISOR")
@@ -786,14 +794,26 @@ def main():
     print("  2. launch Phantasia")
     print("  3. in-game: Info -> Stats (once) so brains + magic level load\n")
 
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
+    if open_browser:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
 
-    while True:
-        c, _ = s.accept()
-        threading.Thread(target=handle, args=(c,), daemon=True).start()
+    def accept_loop():
+        while True:
+            c, _ = s.accept()
+            threading.Thread(target=handle, args=(c,), daemon=True).start()
+
+    if background:
+        threading.Thread(target=accept_loop, daemon=True).start()
+    else:
+        accept_loop()
+
+
+def main():
+    parse_args(sys.argv[1:])
+    start(open_browser=True, background=False)
 
 
 if __name__ == "__main__":
