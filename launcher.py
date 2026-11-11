@@ -90,6 +90,16 @@ if sys.stdout is None or sys.stderr is None:
         pass
 
 
+# A crash inside Windows API code kills Python outright, with no exception
+# to catch. faulthandler still writes where it happened to the log.
+try:
+    import faulthandler
+    _faultf = open(LOG_PATH, "a", encoding="utf-8")
+    faulthandler.enable(file=_faultf)
+except Exception:
+    pass
+
+
 def log(msg):
     try:
         with open(LOG_PATH, "a", encoding="utf-8") as f:
@@ -845,7 +855,8 @@ class Launcher:
         self.native_size = client_size(hwnd)
         self._placed = None
         self._clip = bool(self.cfg.get("hide_titlebar", True))
-        log(f"game window found: {describe(hwnd)}")
+        log(f"game window found (pid tree {sorted(descendant_pids(self.proc.pid)) if self.proc else 'shell'}): "
+            f"{describe(hwnd)}")
         if self._docked():
             dock(hwnd, self._top_hwnd())
             self.show_placeholder("")       # black backdrop behind the game
