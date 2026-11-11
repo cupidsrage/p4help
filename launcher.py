@@ -324,10 +324,19 @@ if IS_WIN:
             user32.ShowWindow(hwnd, SW_RESTORE)
         flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW
         if not clip:
-            user32.SetWindowRgn(hwnd, None, True)
             wl, wt, wr, wb = window_rect(hwnd)
             x, y, w, h = _target(hwnd, area, stretch, (wr - wl, wb - wt))
             user32.SetWindowPos(hwnd, None, x, y, w, h, flags)
+            # A fixed-size window bigger than the area would spill over the
+            # panel/off the launcher: clip it to the area. If it fits, no clip.
+            ax, ay, ar, ab = area
+            wl, wt, wr, wb = window_rect(hwnd)
+            if wl >= ax and wt >= ay and wr <= ar and wb <= ab:
+                user32.SetWindowRgn(hwnd, None, True)
+            else:
+                rgn = gdi32.CreateRectRgn(max(wl, ax) - wl, max(wt, ay) - wt,
+                                          min(wr, ar) - wl, min(wb, ab) - wt)
+                user32.SetWindowRgn(hwnd, rgn, True)
             return
         cl, ct, cr, cb = client_screen_rect(hwnd)
         x, y, cw, ch = _target(hwnd, area, stretch, (cr - cl, cb - ct))
