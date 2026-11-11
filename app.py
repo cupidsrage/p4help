@@ -22,6 +22,7 @@ Local only. Per the Phantasia calc policy, building this is fine;
 distributing or advertising it is not.
 """
 
+import itertools
 import socket
 import threading
 import select
@@ -93,6 +94,9 @@ STATE = {
     "buttons": [],
 }
 LOCK = threading.Lock()
+# Character-creation ids must stay unique across reconnects: each connection
+# gets a fresh Tracker, but the overlay's RollJudge lives on and caches by id.
+_CHAR_IDS = itertools.count(1)
 RECORDER = None   # recorder.Recorder, set by enable_recording()
 
 
@@ -260,7 +264,7 @@ class Tracker:
             # "Which type of character do you want?": a new character
             self.class_menu = names
             self.class_pick = None
-            self.roll_char += 1
+            self.roll_char = next(_CHAR_IDS)
             self.roll_n = 0
             with LOCK:
                 STATE["roll"] = None
