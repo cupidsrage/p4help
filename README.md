@@ -46,6 +46,9 @@ panel docked on the right. Close the window and everything shuts down.
 `launcher.json` options: `client`, `client_args`, `server` (upstream IP),
 `window_title` (set this to part of the client's title bar text if the launcher
 can't find its window), `stretch` (fill the space or keep native size),
+`embed_mode` (`"dock"`, the default, keeps the game its own window glued over
+the game area so clicks work normally; `"reparent"` makes it a true child window,
+which some clients won't take clicks in),
 `panel_width`, `close_client_on_exit`, `autoplay`, `record`,
 `record_screenshots`.
 
