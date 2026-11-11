@@ -18,7 +18,10 @@ First run asks you to pick the game client (.exe / .jar / .bat / shortcut);
 the choice is saved in launcher.json next to this file. Use the toolbar's
 "Client..." button to change it later.
 
-Embedding uses the Win32 SetParent API, so it needs Windows. On other systems
+Embedding needs Windows. By default the game stays its own window, glued over
+the launcher's game area with its title bar clipped off (embed_mode "dock"), so
+mouse and keyboard work exactly as normal. embed_mode "reparent" makes it a true
+child window instead (Win32 SetParent), which some clients don't take clicks in. On other systems
 the launcher still runs the proxy, starts the client in its own window and
 shows the advisor panel.
 
@@ -50,6 +53,14 @@ DEFAULTS = {
     "server": "178.63.136.86",    # upstream game server (app.py -h)
     "game_host": "phantasia5.com",
     "stretch": True,              # resize the client to fill the space
+    # How the game is put inside the window:
+    #   "dock"     - the game stays its own window, glued over the game area
+    #                with its title bar clipped off. Clicks and keys work
+    #                normally. (default)
+    #   "reparent" - the game becomes a child window of the launcher. Looks
+    #                the same, but many clients (Java, .NET, scaled displays)
+    #                stop taking clicks or get them in the wrong place.
+    "embed_mode": "dock",
     "panel": True,                # show the advisor panel
     "panel_width": 340,
     "close_client_on_exit": True,
@@ -110,6 +121,8 @@ if IS_WIN:
     SWP_NOZORDER, SWP_FRAMECHANGED, SWP_SHOWWINDOW = 0x0004, 0x0020, 0x0040
     SWP_NOACTIVATE = 0x0010
     GW_OWNER = 4
+    GWLP_HWNDPARENT = -8          # on a top-level window: its OWNER
+    SW_RESTORE = 9
     WM_CLOSE = 0x0010
     TH32CS_SNAPPROCESS = 0x00000002
 
@@ -141,6 +154,13 @@ if IS_WIN:
     user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
     user32.GetForegroundWindow.restype = wintypes.HWND
     user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+    user32.SetWindowRgn.argtypes = [wintypes.HWND, wintypes.HANDLE, wintypes.BOOL]
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    user32.IsIconic.argtypes = [wintypes.HWND]
+    gdi32 = ctypes.WinDLL("gdi32")
+    gdi32.CreateRectRgn.argtypes = [ctypes.c_int] * 4
+    gdi32.CreateRectRgn.restype = wintypes.HANDLE
     user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
     user32.GetAncestor.restype = wintypes.HWND
     GA_ROOT = 2
@@ -226,6 +246,56 @@ if IS_WIN:
         user32.GetClientRect(hwnd, ctypes.byref(r))
         return r.right - r.left, r.bottom - r.top
 
+    def window_rect(hwnd):
+        r = wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(r))
+        return r.left, r.top, r.right, r.bottom
+
+    def client_screen_rect(hwnd):
+        """The window's client area (no title bar/borders) in screen coords."""
+        w, h = client_size(hwnd)
+        pt = wintypes.POINT(0, 0)
+        user32.ClientToScreen(hwnd, ctypes.byref(pt))
+        return pt.x, pt.y, pt.x + w, pt.y + h
+
+    def dock(hwnd, owner):
+        """Make `owner` own the window: it then stays above the launcher,
+        minimizes with it and leaves the taskbar. Its own styles and input
+        handling are untouched, unlike SetParent."""
+        if user32.IsIconic(hwnd):
+            user32.ShowWindow(hwnd, SW_RESTORE)
+        _SetWL(hwnd, GWLP_HWNDPARENT, owner or 0)
+
+    def place_docked(hwnd, area, stretch):
+        """Move the window so its CLIENT area covers `area` (screen rect),
+        and clip off everything outside the client area (title bar, borders)
+        so it looks built in and clicks there fall through to the launcher."""
+        ax, ay, ar, ab = area
+        wl, wt, wr, wb = window_rect(hwnd)
+        cl, ct, cr, cb = client_screen_rect(hwnd)
+        left, top = cl - wl, ct - wt              # frame thickness
+        right, bottom = wr - cr, wb - cb
+        resizable = bool(_GetWL(hwnd, GWL_STYLE) & WS_THICKFRAME)
+        if stretch and resizable:
+            cw, ch = ar - ax, ab - ay
+            x, y = ax, ay
+        else:
+            cw, ch = cr - cl, cb - ct
+            x = ax + max(0, ((ar - ax) - cw) // 2)
+            y = ay + max(0, ((ab - ay) - ch) // 2)
+        user32.SetWindowPos(hwnd, None, x - left, y - top,
+                            cw + left + right, ch + top + bottom,
+                            SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW)
+        # actual client size after the move (fixed-size windows ignore us)
+        cl, ct, cr, cb = client_screen_rect(hwnd)
+        wl, wt, _, _ = window_rect(hwnd)
+        rgn = gdi32.CreateRectRgn(cl - wl, ct - wt, cr - wl, cb - wt)
+        user32.SetWindowRgn(hwnd, rgn, True)     # system owns rgn now
+
+    def undock(hwnd):
+        user32.SetWindowRgn(hwnd, None, True)
+        _SetWL(hwnd, GWLP_HWNDPARENT, 0)
+
     def adopt(hwnd, host):
         """Strip the window's frame and make it a child of `host`."""
         style = _GetWL(hwnd, GWL_STYLE)
@@ -308,6 +378,7 @@ class Launcher:
         self.native_size = None
         self.searching_since = None
         self.proxy_note = ""
+        self._placed = None
         self._known_windows = set()
 
         self.root = tk.Tk()
@@ -391,6 +462,7 @@ class Launcher:
         self.placeholder.place(relx=0.5, rely=0.5, anchor="center")
 
         self.game.bind("<Configure>", lambda e: self._fit())
+        self.root.bind("<Configure>", lambda e: self._fit(), add="+")
         self.game.bind("<Button-1>", lambda e: self._focus_game())
         self.root.bind("<FocusIn>", self._on_focus)
 
@@ -462,9 +534,7 @@ class Launcher:
             from PIL import ImageGrab
         except ImportError:
             return False
-        r = wintypes.RECT()
-        user32.GetWindowRect(self.hwnd, ctypes.byref(r))
-        ImageGrab.grab(bbox=(r.left, r.top, r.right, r.bottom),
+        ImageGrab.grab(bbox=client_screen_rect(self.hwnd),
                        all_screens=True).save(path)
         return True
 
@@ -511,10 +581,14 @@ class Launcher:
             return True   # no embedding; buttons.py's xdotool path as before
         if not (self.hwnd and user32.IsWindow(self.hwnd)):
             return False
-        top = user32.GetAncestor(self.game.winfo_id(), GA_ROOT)
-        if user32.GetForegroundWindow() != top:
+        top = self._top_hwnd()
+        fg = user32.GetForegroundWindow()
+        if fg not in (top, self.hwnd):
             return False
-        if threading.current_thread() is threading.main_thread():
+        if self._docked():
+            if fg != self.hwnd:
+                user32.SetForegroundWindow(self.hwnd)
+        elif threading.current_thread() is threading.main_thread():
             user32.SetFocus(self.hwnd)
         return True
 
@@ -662,11 +736,22 @@ class Launcher:
                 best = best or hwnd    # shell launch: new window named Phantasia
         return best
 
+    def _docked(self):
+        return self.cfg.get("embed_mode", "dock") != "reparent"
+
+    def _top_hwnd(self):
+        return user32.GetAncestor(self.game.winfo_id(), GA_ROOT)
+
     def _embed(self, hwnd):
         self.hwnd = hwnd
         self.native_size = client_size(hwnd)
-        self.placeholder.place_forget()
-        adopt(hwnd, self.game.winfo_id())
+        self._placed = None
+        if self._docked():
+            dock(hwnd, self._top_hwnd())
+            self.show_placeholder("")       # black backdrop behind the game
+        else:
+            self.placeholder.place_forget()
+            adopt(hwnd, self.game.winfo_id())
         self._fit()
         self._focus_game()
         self.set_status("game running", GREEN)
@@ -681,6 +766,21 @@ class Launcher:
     def _fit(self):
         if not (IS_WIN and self.hwnd):
             return
+        if self._docked():
+            if not user32.IsWindow(self.hwnd):
+                return
+            if user32.IsIconic(self._top_hwnd()):
+                return                      # launcher minimized: leave it
+            area = window_rect(self.game.winfo_id())
+            if area[2] - area[0] < 20 or area[3] - area[1] < 20:
+                return
+            # re-place when the launcher moved/resized OR the game got moved
+            # (e.g. Alt+Space > Move); cheap enough to check every tick
+            key = (area, client_screen_rect(self.hwnd))
+            if key != self._placed:
+                place_docked(self.hwnd, area, self.cfg["stretch"])
+                self._placed = (area, client_screen_rect(self.hwnd))
+            return
         gw, gh = self.game.winfo_width(), self.game.winfo_height()
         if self.cfg["stretch"] or not self.native_size:
             x, y, w, h = 0, 0, gw, gh
@@ -691,7 +791,13 @@ class Launcher:
 
     def _focus_game(self):
         if IS_WIN and self.hwnd and user32.IsWindow(self.hwnd):
-            user32.SetFocus(self.hwnd)
+            if self._docked():
+                # only when the launcher is in front, so we never pull the
+                # game up over some other app the player switched to
+                if user32.GetForegroundWindow() == self._top_hwnd():
+                    user32.SetForegroundWindow(self.hwnd)
+            else:
+                user32.SetFocus(self.hwnd)
 
     def _on_focus(self, e):
         # Clicking the launcher's frame/title should send keys to the game,
@@ -717,6 +823,8 @@ class Launcher:
         if self.hwnd:
             if IS_WIN and not user32.IsWindow(self.hwnd):
                 self._game_closed()
+            else:
+                self._fit()     # docked: follow the launcher if it moved
             return
 
         if self.searching_since is None:
@@ -763,7 +871,10 @@ class Launcher:
         if self.cfg.get("close_client_on_exit", True):
             self._close_client()
         elif IS_WIN and self.hwnd and user32.IsWindow(self.hwnd):
-            user32.SetParent(self.hwnd, None)   # hand the window back
+            if self._docked():
+                undock(self.hwnd)               # hand the window back
+            else:
+                user32.SetParent(self.hwnd, None)
         self.root.destroy()
 
     def run(self):
