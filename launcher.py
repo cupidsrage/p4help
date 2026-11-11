@@ -36,14 +36,7 @@ import subprocess
 import sys
 import threading
 import time
-import tkinter as tk
 import webbrowser
-from tkinter import filedialog, messagebox
-from tkinter import font as tkfont
-
-import app as proxy
-from buttons import ButtonOverlay
-from overlay import Overlay, BG, PANEL, LINE, INK, DIM, GOLD, GREEN, AMBER, RED
 
 IS_WIN = sys.platform == "win32"
 FROZEN = getattr(sys, "frozen", False)
@@ -67,6 +60,9 @@ DEFAULTS = {
 }
 
 EMBED_TIMEOUT_S = 45
+BROWSERS = ("chrome", "firefox", "edge", "opera", "brave", "vivaldi",
+            "internet explorer")
+LOG_PATH = os.path.join(HOME, "launcher.log")
 BAR_BG = "#0f0d09"
 
 
@@ -246,6 +242,63 @@ if IS_WIN:
                             SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW)
 
 
+def resolve_shortcut(path):
+    """(target, args, workdir) of a Windows .lnk, or None."""
+    ps = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:P4LNK);"
+          "$s.TargetPath;$s.Arguments;$s.WorkingDirectory")
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+            capture_output=True, text=True, timeout=10,
+            env={**os.environ, "P4LNK": path}, creationflags=0x08000000)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = (out.stdout or "").splitlines() + ["", "", ""]
+    target, args, cwd = (x.strip() for x in lines[:3])
+    if not target or not os.path.exists(target):
+        return None
+    return (target, shlex.split(args, posix=False) if args else [],
+            cwd or os.path.dirname(target) or None)
+
+
+# ------------------------------------------------------------ crash report ---
+def report_crash(exc_type, exc, tb, where="startup"):
+    """pythonw has no console, so errors would vanish. Log them and say so."""
+    import traceback
+    text = "".join(traceback.format_exception(exc_type, exc, tb))
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} ({where}) ===\n")
+            f.write(text)
+    except OSError:
+        pass
+    msg = (f"Phantasia Advisor hit an error ({where}):\n\n"
+           f"{exc_type.__name__}: {exc}\n\nFull details saved to:\n{LOG_PATH}")
+    try:
+        if IS_WIN:
+            ctypes.windll.user32.MessageBoxW(None, msg, "Phantasia Advisor", 0x10)
+        else:
+            sys.stderr.write(text)
+    except Exception:
+        sys.stderr.write(text)
+
+
+# Imported here, after report_crash exists, so a missing module (no tkinter,
+# a file left out of the folder) shows a message instead of silently exiting.
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox
+    from tkinter import font as tkfont
+
+    import app as proxy
+    from buttons import ButtonOverlay
+    from overlay import (Overlay, BG, PANEL, LINE, INK, DIM, GOLD, GREEN,
+                         AMBER, RED)
+except Exception:
+    report_crash(*sys.exc_info(), where="loading")
+    sys.exit(1)
+
+
 # ---------------------------------------------------------------- the app ---
 class Launcher:
     def __init__(self):
@@ -263,6 +316,21 @@ class Launcher:
         self.root.geometry(self.cfg.get("geometry") or "1560x860+40+40")
         self.root.minsize(640, 420)
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
+        self._errors_shown = 0
+
+        def on_tk_error(et, e, tb):
+            # errors inside the running app: log every one, pop up the first few
+            if self._errors_shown < 3:
+                self._errors_shown += 1
+                report_crash(et, e, tb, "while running")
+            else:
+                import traceback
+                try:
+                    with open(LOG_PATH, "a", encoding="utf-8") as f:
+                        f.write("".join(traceback.format_exception(et, e, tb)))
+                except OSError:
+                    pass
+        self.root.report_callback_exception = on_tk_error
 
         self.f_sm = tkfont.Font(family="Segoe UI", size=9)
         self.f_md = tkfont.Font(family="Segoe UI", size=11)
@@ -508,9 +576,9 @@ class Launcher:
         self.relaunch()
         return True
 
-    def _command(self):
-        path = self.cfg["client"]
-        args = shlex.split(self.cfg.get("client_args") or "", posix=not IS_WIN)
+    def _command(self, path, extra=()):
+        args = list(extra) + shlex.split(self.cfg.get("client_args") or "",
+                                         posix=not IS_WIN)
         ext = os.path.splitext(path)[1].lower()
         if ext == ".jar":
             java = "javaw" if IS_WIN else "java"
@@ -533,16 +601,20 @@ class Launcher:
         self.show_placeholder("Starting the game\u2026")
         self.set_status("launching " + os.path.basename(path))
         try:
+            target, extra, cwd = path, [], os.path.dirname(path) or None
             if IS_WIN and os.path.splitext(path)[1].lower() == ".lnk":
-                # shortcuts can't be exec'd directly; let the shell open it and
-                # find the window by title instead of process id.
-                os.startfile(path)
+                lnk = resolve_shortcut(path)
+                if lnk:
+                    target, extra, cwd = lnk
+            if IS_WIN and os.path.splitext(target)[1].lower() == ".lnk":
+                # couldn't read the shortcut: let the shell open it and find
+                # the window by title instead of process id.
+                os.startfile(target)
                 self.proc = None
             else:
                 flags = 0x08000000 if IS_WIN else 0   # CREATE_NO_WINDOW
-                self.proc = subprocess.Popen(self._command(),
-                                             cwd=os.path.dirname(path) or None,
-                                             creationflags=flags)
+                self.proc = subprocess.Popen(self._command(target, extra),
+                                             cwd=cwd, creationflags=flags)
         except OSError as e:
             self.show_placeholder(f"Couldn't start the game:\n{e}\n\n"
                                   "Use  Client\u2026  to pick it again.")
@@ -570,19 +642,24 @@ class Launcher:
     # ------------------------------------------------------------ embed ----
     def _find_window(self):
         title = (self.cfg.get("window_title") or "").lower()
-        own = self.root.winfo_id()
+        me = os.getpid()
         pids = descendant_pids(self.proc.pid) if self.proc else set()
         best = None
         for hwnd, pid, text in top_windows():
+            if pid == me:
+                continue   # never swallow our own window ("Phantasia Advisor")
             if not text and not title:
                 continue
-            if title and title in text.lower():
+            low = text.lower()
+            if any(b in low for b in BROWSERS):
+                continue   # a phantasia5.com browser tab is not the game
+            if title and title in low:
                 return hwnd
             if pid in pids:
                 best = best or hwnd
             elif not pids and not title and hwnd not in self._known_windows \
-                    and "phantasia" in text.lower() and hwnd != own:
-                best = best or hwnd    # .lnk launch: new window named Phantasia
+                    and "phantasia" in low:
+                best = best or hwnd    # shell launch: new window named Phantasia
         return best
 
     def _embed(self, hwnd):
@@ -694,4 +771,8 @@ class Launcher:
 
 
 if __name__ == "__main__":
-    Launcher().run()
+    try:
+        Launcher().run()
+    except Exception:
+        report_crash(*sys.exc_info())
+        sys.exit(1)
