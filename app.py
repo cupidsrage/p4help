@@ -91,6 +91,24 @@ STATE = {
     "buttons": [],
 }
 LOCK = threading.Lock()
+RECORDER = None   # recorder.Recorder, set by enable_recording()
+
+
+def snapshot_state():
+    with LOCK:
+        return json.loads(json.dumps({k: STATE.get(k) for k in
+                                      ("player", "fight", "buttons", "quest",
+                                       "location")}, default=str))
+
+
+def enable_recording(folder=None):
+    """Turn on the game recorder (see recorder.py). Returns it."""
+    global RECORDER
+    import recorder
+    if RECORDER is None:
+        RECORDER = recorder.Recorder(folder or os.path.join(HERE, "recordings"),
+                                     LINECOUNT, snapshot_state)
+    return RECORDER
 
 
 def num(s):
@@ -703,13 +721,18 @@ class Web(BaseHTTPRequestHandler):
 
 
 # ---------- tcp proxy ----------
-def pump(src, dst, tracker=None):
+def pump(src, dst, tracker=None, tap=None):
     try:
         while True:
             data = src.recv(8192)
             if not data:
                 break
             dst.sendall(data)
+            if tap is not None and RECORDER is not None:
+                try:
+                    tap(data.decode("utf-8", errors="replace"))
+                except Exception as e:
+                    print(f"[record] {e}", file=sys.stderr)
             if tracker is not None:
                 if RAW_LOG:
                     try:
@@ -744,9 +767,16 @@ def handle(client):
     print("  · client connected")
 
     t = Tracker()
-    a = threading.Thread(target=pump, args=(server, client, t), daemon=True)
-    b = threading.Thread(target=pump, args=(client, server, None), daemon=True)
+    rec = RECORDER
+    if rec is not None:
+        rec.open()
+    a = threading.Thread(target=pump, daemon=True,
+                         args=(server, client, t, rec.server if rec else None))
+    b = threading.Thread(target=pump, daemon=True,
+                         args=(client, server, None, rec.client if rec else None))
     a.start(); b.start(); a.join(); b.join()
+    if rec is not None:
+        rec.close()
 
     client.close(); server.close()
     with LOCK:
@@ -762,6 +792,10 @@ def parse_args(a):
     if "-l" in a: LISTEN_PORT = int(a[a.index("-l") + 1])
     if "-w" in a: WEB_PORT = int(a[a.index("-w") + 1])
     if "--log" in a: RAW_LOG = a[a.index("--log") + 1]
+    if "--record" in a:
+        i = a.index("--record")
+        nxt = a[i + 1] if i + 1 < len(a) and not a[i + 1].startswith("-") else None
+        enable_recording(nxt)
 
 
 def start(open_browser=True, background=False):
