@@ -90,6 +90,16 @@ if sys.stdout is None or sys.stderr is None:
         pass
 
 
+# A crash inside Windows API code kills Python outright, with no exception
+# to catch. faulthandler still writes where it happened to the log.
+try:
+    import faulthandler
+    _faultf = open(LOG_PATH, "a", encoding="utf-8")
+    faulthandler.enable(file=_faultf)
+except Exception:
+    pass
+
+
 def log(msg):
     try:
         with open(LOG_PATH, "a", encoding="utf-8") as f:
@@ -324,10 +334,19 @@ if IS_WIN:
             user32.ShowWindow(hwnd, SW_RESTORE)
         flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW
         if not clip:
-            user32.SetWindowRgn(hwnd, None, True)
             wl, wt, wr, wb = window_rect(hwnd)
             x, y, w, h = _target(hwnd, area, stretch, (wr - wl, wb - wt))
             user32.SetWindowPos(hwnd, None, x, y, w, h, flags)
+            # A fixed-size window bigger than the area would spill over the
+            # panel/off the launcher: clip it to the area. If it fits, no clip.
+            ax, ay, ar, ab = area
+            wl, wt, wr, wb = window_rect(hwnd)
+            if wl >= ax and wt >= ay and wr <= ar and wb <= ab:
+                user32.SetWindowRgn(hwnd, None, True)
+            else:
+                rgn = gdi32.CreateRectRgn(max(wl, ax) - wl, max(wt, ay) - wt,
+                                          min(wr, ar) - wl, min(wb, ab) - wt)
+                user32.SetWindowRgn(hwnd, rgn, True)
             return
         cl, ct, cr, cb = client_screen_rect(hwnd)
         x, y, cw, ch = _target(hwnd, area, stretch, (cr - cl, cb - ct))
@@ -836,7 +855,8 @@ class Launcher:
         self.native_size = client_size(hwnd)
         self._placed = None
         self._clip = bool(self.cfg.get("hide_titlebar", True))
-        log(f"game window found: {describe(hwnd)}")
+        log(f"game window found (pid tree {sorted(descendant_pids(self.proc.pid)) if self.proc else 'shell'}): "
+            f"{describe(hwnd)}")
         if self._docked():
             dock(hwnd, self._top_hwnd())
             self.show_placeholder("")       # black backdrop behind the game
