@@ -6,7 +6,11 @@ One window. Open it and it:
   1. starts the proxy + dashboard in the background (no console window)
   2. launches the Phantasia game client
   3. pulls the client's window INSIDE this window, with the advisor panel
-     docked on the right
+     and the auto-play button grid docked on the right
+
+Auto-play (toolbar button) presses the advisor's recommended key in the game,
+the same as buttons.py's auto-press. It only sends keys while this window is
+in front with the game embedded, so it never types into other apps.
 
     pythonw launcher.py          (or double-click Phantasia.bat)
 
@@ -38,6 +42,7 @@ from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 
 import app as proxy
+from buttons import ButtonOverlay
 from overlay import Overlay, BG, PANEL, LINE, INK, DIM, GOLD, GREEN, AMBER, RED
 
 IS_WIN = sys.platform == "win32"
@@ -55,6 +60,7 @@ DEFAULTS = {
     "panel": True,                # show the advisor panel
     "panel_width": 340,
     "close_client_on_exit": True,
+    "autoplay": False,            # auto-press the advisor's move in the game
     "geometry": "",
 }
 
@@ -135,6 +141,10 @@ if IS_WIN:
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT,
                                     wintypes.WPARAM, wintypes.LPARAM]
     user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+    user32.GetAncestor.restype = wintypes.HWND
+    GA_ROOT = 2
     if ctypes.sizeof(ctypes.c_void_p) == 8:
         _GetWL, _SetWL = user32.GetWindowLongPtrW, user32.SetWindowLongPtrW
     else:
@@ -270,7 +280,10 @@ class Launcher:
                  font=self.f_bold).pack(side="left", padx=10)
 
         def btn(text, cmd):
-            b = tk.Button(bar, text=text, command=cmd, bg=PANEL, fg=INK,
+            def run():
+                cmd()
+                self._focus_game()   # keep keystrokes going to the game
+            b = tk.Button(bar, text=text, command=run, bg=PANEL, fg=INK,
                           activebackground=LINE, activeforeground=INK,
                           relief="flat", bd=0, padx=10, font=self.f_sm,
                           cursor="hand2")
@@ -282,6 +295,8 @@ class Launcher:
         btn("Dashboard", self.open_dashboard)
         self.panel_btn = btn("Hide advisor" if self.cfg["panel"] else "Show advisor",
                              self.toggle_panel)
+        self.auto_btn = btn("", self.toggle_autoplay)
+        self.auto_btn.configure(font=self.f_bold)
 
         self.status = tk.Label(bar, text="", bg=BAR_BG, fg=DIM, font=self.f_sm,
                                anchor="e")
@@ -305,7 +320,20 @@ class Launcher:
         self.game.bind("<Button-1>", lambda e: self._focus_game())
         self.root.bind("<FocusIn>", self._on_focus)
 
-        self.panel = Overlay(parent=self.panel_frame)
+        # right column: advisor on top, the auto-play button grid underneath
+        self.buttons_frame = tk.Frame(self.panel_frame, bg=BG, height=250)
+        self.buttons_frame.pack(side="bottom", fill="x")
+        self.buttons_frame.pack_propagate(False)
+        tk.Frame(self.panel_frame, bg=LINE, height=1).pack(side="bottom", fill="x")
+        self.advice_frame = tk.Frame(self.panel_frame, bg=BG)
+        self.advice_frame.pack(side="top", fill="both", expand=True)
+
+        self.panel = Overlay(parent=self.advice_frame)
+        self.buttons = ButtonOverlay(parent=self.buttons_frame,
+                                     autopress=self.cfg["autoplay"],
+                                     before_press=self._game_ready_for_keys,
+                                     on_autopress_change=self._autoplay_changed)
+        self._paint_auto_btn()
 
     def _layout_panel(self):
         for w in (self.panel_frame, self.divider, self.game):
@@ -321,6 +349,40 @@ class Launcher:
                                  else "Show advisor")
         self._layout_panel()
         save_config(self.cfg)
+
+    # --------------------------------------------------------- auto-play ---
+    def toggle_autoplay(self):
+        self.buttons.set_autopress(not self.cfg["autoplay"])
+
+    def _autoplay_changed(self, on):
+        self.cfg["autoplay"] = on
+        save_config(self.cfg)
+        self._paint_auto_btn()
+
+    def _paint_auto_btn(self):
+        on = self.cfg["autoplay"]
+        self.auto_btn.configure(text="Auto-play: ON" if on else "Auto-play: OFF",
+                                fg="#0c0a07" if on else INK,
+                                bg=GREEN if on else PANEL,
+                                activebackground=GREEN if on else LINE)
+
+    def _game_ready_for_keys(self):
+        """Gate for every auto-play key tap.
+
+        Keys are real keystrokes, so they go to whatever has focus. Only send
+        them while THIS window is in front and the game is embedded in it, and
+        put keyboard focus on the game first. Alt-tab away and auto-play just
+        waits instead of typing into your other apps."""
+        if not IS_WIN:
+            return True   # no embedding; buttons.py's xdotool path as before
+        if not (self.hwnd and user32.IsWindow(self.hwnd)):
+            return False
+        top = user32.GetAncestor(self.game.winfo_id(), GA_ROOT)
+        if user32.GetForegroundWindow() != top:
+            return False
+        if threading.current_thread() is threading.main_thread():
+            user32.SetFocus(self.hwnd)
+        return True
 
     def set_status(self, text, color=DIM):
         parts = [x for x in (self.proxy_note, text) if x]
@@ -552,6 +614,7 @@ class Launcher:
             self.cfg["geometry"] = self.root.geometry()
         save_config(self.cfg)
         self.panel.alive = False
+        self.buttons.alive = False
         if self.cfg.get("close_client_on_exit", True):
             self._close_client()
         elif IS_WIN and self.hwnd and user32.IsWindow(self.hwnd):

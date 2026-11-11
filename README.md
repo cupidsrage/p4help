@@ -21,7 +21,12 @@ panel docked on the right. Close the window and everything shuts down.
 - **First run:** it asks you to pick the game client (.exe, .jar, .bat or
   shortcut). The choice is saved to `launcher.json`. Change it with **Client…**.
 - **Toolbar:** Relaunch game · Client… · Dashboard (full UI in the browser) ·
-  Hide/Show advisor.
+  Hide/Show advisor · **Auto-play**.
+- **Auto-play:** the button grid under the advisor lights the move to make. Turn on
+  **Auto-play** (toolbar, or click AUTO in the grid) and it presses that key in the
+  game for you: combat moves, the Spell → Magic Bolt → mana steps, and "More"
+  prompts. It only types while the launcher window is in front, so alt-tabbing
+  away pauses it. It's off by default and remembers your choice.
 - **Want a real app?** Run `build_exe.bat` once (needs `pip install pyinstaller`)
   to get `dist\Phantasia.exe`. Pin it or put it on your desktop.
 - The **hosts-file entry below is still needed**. The launcher warns you if it's missing.
@@ -31,7 +36,7 @@ panel docked on the right. Close the window and everything shuts down.
 `launcher.json` options: `client`, `client_args`, `server` (upstream IP),
 `window_title` (set this to part of the client's title bar text if the launcher
 can't find its window), `stretch` (fill the space or keep native size),
-`panel_width`, `close_client_on_exit`.
+`panel_width`, `close_client_on_exit`, `autoplay`.
 
 ## Run it (proxy only)
 
