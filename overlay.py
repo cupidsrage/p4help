@@ -48,14 +48,21 @@ NAMES = {
 
 
 class Overlay:
-    def __init__(self):
-        self.root = tk.Tk()
-        self.root.title("Phantasia Advisor")
-        self.root.overrideredirect(True)          # borderless
-        self.root.attributes("-topmost", True)    # always on top
-        self.root.attributes("-alpha", 0.94)
+    def __init__(self, parent=None):
+        # parent=None: standalone floating window.
+        # parent=<Frame>: render inside that frame (used by launcher.py,
+        # which docks this panel beside the embedded game client).
+        self.embedded = parent is not None
+        if self.embedded:
+            self.root = parent
+        else:
+            self.root = tk.Tk()
+            self.root.title("Phantasia Advisor")
+            self.root.overrideredirect(True)          # borderless
+            self.root.attributes("-topmost", True)    # always on top
+            self.root.attributes("-alpha", 0.94)
+            self.root.geometry("340x600+40+40")
         self.root.configure(bg=BG)
-        self.root.geometry("340x600+40+40")
 
         self.f_tiny = tkfont.Font(family="Segoe UI", size=7)
         self.f_sm   = tkfont.Font(family="Segoe UI", size=8)
@@ -64,7 +71,8 @@ class Overlay:
         self.f_nm   = tkfont.Font(family="Segoe UI", size=11, weight="bold")
 
         self._build()
-        self._bind()
+        if not self.embedded:
+            self._bind()
 
         self.data = {}
         self.q = queue.Queue()
@@ -89,7 +97,8 @@ class Overlay:
         self.dot = tk.Label(self.bar, text="\u25cf", bg="#0f0d09", fg=RED,
                             font=self.f_sm)
         self.dot.pack(side="right", padx=8)
-        self.hint = tk.Label(self.bar, text="F8 hide", bg="#0f0d09", fg=DIM,
+        self.hint = tk.Label(self.bar, text="" if self.embedded else "F8 hide",
+                             bg="#0f0d09", fg=DIM,
                              font=self.f_tiny)
         self.hint.pack(side="right")
 
