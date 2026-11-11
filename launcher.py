@@ -6,7 +6,11 @@ One window. Open it and it:
   1. starts the proxy + dashboard in the background (no console window)
   2. launches the Phantasia game client
   3. pulls the client's window INSIDE this window, with the advisor panel
-     docked on the right
+     and the auto-play button grid docked on the right
+
+Auto-play (toolbar button) presses the advisor's recommended key in the game,
+the same as buttons.py's auto-press. It only sends keys while this window is
+in front with the game embedded, so it never types into other apps.
 
     pythonw launcher.py          (or double-click Phantasia.bat)
 
@@ -38,6 +42,7 @@ from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 
 import app as proxy
+from buttons import ButtonOverlay
 from overlay import Overlay, BG, PANEL, LINE, INK, DIM, GOLD, GREEN, AMBER, RED
 
 IS_WIN = sys.platform == "win32"
@@ -55,6 +60,9 @@ DEFAULTS = {
     "panel": True,                # show the advisor panel
     "panel_width": 340,
     "close_client_on_exit": True,
+    "autoplay": False,            # auto-press the advisor's move in the game
+    "record": True,               # record screens + inputs (recorder.py)
+    "record_screenshots": False,  # also save a PNG of the game per input
     "geometry": "",
 }
 
@@ -135,6 +143,11 @@ if IS_WIN:
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT,
                                     wintypes.WPARAM, wintypes.LPARAM]
     user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+    user32.GetAncestor.restype = wintypes.HWND
+    GA_ROOT = 2
     if ctypes.sizeof(ctypes.c_void_p) == 8:
         _GetWL, _SetWL = user32.GetWindowLongPtrW, user32.SetWindowLongPtrW
     else:
@@ -255,8 +268,9 @@ class Launcher:
         self.f_md = tkfont.Font(family="Segoe UI", size=11)
         self.f_bold = tkfont.Font(family="Segoe UI", size=9, weight="bold")
 
-        self._build()
         self._start_proxy()
+        self._setup_recorder()
+        self._build()
         self._check_hosts()
         self.root.after(200, self.launch_client)
         self.root.after(1000, self._watch)
@@ -270,7 +284,10 @@ class Launcher:
                  font=self.f_bold).pack(side="left", padx=10)
 
         def btn(text, cmd):
-            b = tk.Button(bar, text=text, command=cmd, bg=PANEL, fg=INK,
+            def run():
+                cmd()
+                self._focus_game()   # keep keystrokes going to the game
+            b = tk.Button(bar, text=text, command=run, bg=PANEL, fg=INK,
                           activebackground=LINE, activeforeground=INK,
                           relief="flat", bd=0, padx=10, font=self.f_sm,
                           cursor="hand2")
@@ -282,6 +299,10 @@ class Launcher:
         btn("Dashboard", self.open_dashboard)
         self.panel_btn = btn("Hide advisor" if self.cfg["panel"] else "Show advisor",
                              self.toggle_panel)
+        self.auto_btn = btn("", self.toggle_autoplay)
+        self.auto_btn.configure(font=self.f_bold)
+        self.rec_btn = btn("", self.toggle_record)
+        btn("Recordings", self.open_recordings)
 
         self.status = tk.Label(bar, text="", bg=BAR_BG, fg=DIM, font=self.f_sm,
                                anchor="e")
@@ -305,7 +326,21 @@ class Launcher:
         self.game.bind("<Button-1>", lambda e: self._focus_game())
         self.root.bind("<FocusIn>", self._on_focus)
 
-        self.panel = Overlay(parent=self.panel_frame)
+        # right column: advisor on top, the auto-play button grid underneath
+        self.buttons_frame = tk.Frame(self.panel_frame, bg=BG, height=250)
+        self.buttons_frame.pack(side="bottom", fill="x")
+        self.buttons_frame.pack_propagate(False)
+        tk.Frame(self.panel_frame, bg=LINE, height=1).pack(side="bottom", fill="x")
+        self.advice_frame = tk.Frame(self.panel_frame, bg=BG)
+        self.advice_frame.pack(side="top", fill="both", expand=True)
+
+        self.panel = Overlay(parent=self.advice_frame)
+        self.buttons = ButtonOverlay(parent=self.buttons_frame,
+                                     autopress=self.cfg["autoplay"],
+                                     before_press=self._game_ready_for_keys,
+                                     on_autopress_change=self._autoplay_changed)
+        self._paint_auto_btn()
+        self._paint_rec_btn()
 
     def _layout_panel(self):
         for w in (self.panel_frame, self.divider, self.game):
@@ -321,6 +356,99 @@ class Launcher:
                                  else "Show advisor")
         self._layout_panel()
         save_config(self.cfg)
+
+    # --------------------------------------------------------- auto-play ---
+    def toggle_autoplay(self):
+        self.buttons.set_autopress(not self.cfg["autoplay"])
+
+    def _autoplay_changed(self, on):
+        self.cfg["autoplay"] = on
+        if self.recorder:
+            self.recorder.autoplay = on
+        save_config(self.cfg)
+        self._paint_auto_btn()
+
+    def _paint_auto_btn(self):
+        on = self.cfg["autoplay"]
+        self.auto_btn.configure(text="Auto-play: ON" if on else "Auto-play: OFF",
+                                fg="#0c0a07" if on else INK,
+                                bg=GREEN if on else PANEL,
+                                activebackground=GREEN if on else LINE)
+
+    # --------------------------------------------------------- recording ---
+    def _setup_recorder(self):
+        self.recorder = None
+        if self.proxy_note:
+            return   # proxy runs in another process; it can't be tapped here
+        self.recorder = proxy.enable_recording(os.path.join(HOME, "recordings"))
+        self.recorder.enabled = self.cfg["record"]
+        self.recorder.autoplay = self.cfg["autoplay"]
+        if self.cfg.get("record_screenshots"):
+            self.recorder.screenshot_fn = self._screenshot
+
+    def _screenshot(self, path):
+        """Save the embedded game window to `path` (needs Pillow, Windows)."""
+        if not (IS_WIN and self.hwnd and user32.IsWindow(self.hwnd)):
+            return False
+        try:
+            from PIL import ImageGrab
+        except ImportError:
+            return False
+        r = wintypes.RECT()
+        user32.GetWindowRect(self.hwnd, ctypes.byref(r))
+        ImageGrab.grab(bbox=(r.left, r.top, r.right, r.bottom),
+                       all_screens=True).save(path)
+        return True
+
+    def toggle_record(self):
+        if not self.recorder:
+            messagebox.showinfo(
+                "Recording",
+                "The proxy is already running in another window (app.py / "
+                "start.bat), so this window can't record.\n\nClose that one and "
+                "restart the launcher, or run:  python app.py --record")
+            return
+        on = not self.cfg["record"]
+        self.cfg["record"] = on
+        self.recorder.enabled = on
+        if on and proxy.STATE.get("connected"):
+            self.recorder.open()     # start recording the current game now
+        elif not on:
+            self.recorder.close()
+        save_config(self.cfg)
+        self._paint_rec_btn()
+
+    def _paint_rec_btn(self):
+        on = bool(self.recorder and self.cfg["record"])
+        self.rec_btn.configure(text="\u25cf Recording" if on else "Record: OFF",
+                               fg=RED if on else INK)
+
+    def open_recordings(self):
+        folder = os.path.join(HOME, "recordings")
+        os.makedirs(folder, exist_ok=True)
+        if IS_WIN:
+            os.startfile(folder)
+        else:
+            subprocess.Popen(["xdg-open", folder], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+
+    def _game_ready_for_keys(self):
+        """Gate for every auto-play key tap.
+
+        Keys are real keystrokes, so they go to whatever has focus. Only send
+        them while THIS window is in front and the game is embedded in it, and
+        put keyboard focus on the game first. Alt-tab away and auto-play just
+        waits instead of typing into your other apps."""
+        if not IS_WIN:
+            return True   # no embedding; buttons.py's xdotool path as before
+        if not (self.hwnd and user32.IsWindow(self.hwnd)):
+            return False
+        top = user32.GetAncestor(self.game.winfo_id(), GA_ROOT)
+        if user32.GetForegroundWindow() != top:
+            return False
+        if threading.current_thread() is threading.main_thread():
+            user32.SetFocus(self.hwnd)
+        return True
 
     def set_status(self, text, color=DIM):
         parts = [x for x in (self.proxy_note, text) if x]
@@ -552,6 +680,9 @@ class Launcher:
             self.cfg["geometry"] = self.root.geometry()
         save_config(self.cfg)
         self.panel.alive = False
+        self.buttons.alive = False
+        if self.recorder:
+            self.recorder.close()
         if self.cfg.get("close_client_on_exit", True):
             self._close_client()
         elif IS_WIN and self.hwnd and user32.IsWindow(self.hwnd):

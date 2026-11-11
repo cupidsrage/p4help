@@ -21,7 +21,22 @@ panel docked on the right. Close the window and everything shuts down.
 - **First run:** it asks you to pick the game client (.exe, .jar, .bat or
   shortcut). The choice is saved to `launcher.json`. Change it with **Client…**.
 - **Toolbar:** Relaunch game · Client… · Dashboard (full UI in the browser) ·
-  Hide/Show advisor.
+  Hide/Show advisor · **Auto-play**.
+- **Auto-play:** the button grid under the advisor lights the move to make. Turn on
+  **Auto-play** (toolbar, or click AUTO in the grid) and it presses that key in the
+  game for you: combat moves, the Spell → Magic Bolt → mana steps, and "More"
+  prompts. It only types while the launcher window is in front, so alt-tabbing
+  away pauses it. It's off by default and remembers your choice.
+- **Recording (for teaching auto-play):** while **● Recording** is on, the launcher
+  saves every screen you answer and what you pressed, plus your stats, the fight and
+  the advisor's pick, to `recordings/` (one `.jsonl` dataset + readable `.txt` per
+  game). Passwords are blanked. Auto-play's own presses are labelled so they're
+  kept apart from yours. Run `python analyze.py` to see what you usually press on
+  each screen and where you overrule the advisor. It also writes
+  `recordings/policy.json` for a smarter auto-play to use. Set
+  `"record_screenshots": true` in `launcher.json` to also save a picture of the
+  game for every input (needs `pip install pillow`). Without the launcher:
+  `python app.py -h 178.63.136.86 --record`.
 - **Want a real app?** Run `build_exe.bat` once (needs `pip install pyinstaller`)
   to get `dist\Phantasia.exe`. Pin it or put it on your desktop.
 - The **hosts-file entry below is still needed**. The launcher warns you if it's missing.
@@ -31,7 +46,8 @@ panel docked on the right. Close the window and everything shuts down.
 `launcher.json` options: `client`, `client_args`, `server` (upstream IP),
 `window_title` (set this to part of the client's title bar text if the launcher
 can't find its window), `stretch` (fill the space or keep native size),
-`panel_width`, `close_client_on_exit`.
+`panel_width`, `close_client_on_exit`, `autoplay`, `record`,
+`record_screenshots`.
 
 ## Run it (proxy only)
 
@@ -52,7 +68,8 @@ If the game can't connect, run `ipconfig /flushdns`.
 Brains and Magic Level are *not* sent as packets — they only appear on that
 screen. Luckout runs on brains, so without it the advisor is flying blind.
 
-Flags: `-h <ip>` upstream · `-w <port>` dashboard · `--log raw.txt` capture traffic
+Flags: `-h <ip>` upstream · `-w <port>` dashboard · `--log raw.txt` capture traffic ·
+`--record [folder]` record screens + inputs for `analyze.py`
 
 ---
 
@@ -123,6 +140,7 @@ turns unspendable mana into hundreds of damage.
 
 - `launcher.py` — the all-in-one app window (run this, or `Phantasia.bat`)
 - `app.py` — proxy + web server + packet parser
+- `recorder.py` — records screens + your inputs; `analyze.py` — summarises them
 - `ui.html` — the dashboard
 - `combat.py` — combat engine ported from `fight.c`
 - `monsters.py` — full monster table with size scaling and specials

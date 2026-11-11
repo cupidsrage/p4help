@@ -87,14 +87,28 @@ MOVE_TO_BUTTON = {
 
 
 class ButtonOverlay:
-    def __init__(self):
-        self.root = tk.Tk()
-        self.root.title("Phantasia Buttons")
-        self.root.overrideredirect(True)
-        self.root.attributes("-topmost", True)
-        self.root.attributes("-alpha", 0.95)
+    def __init__(self, parent=None, autopress=None, before_press=None,
+                 on_autopress_change=None):
+        """parent=None: standalone floating window.
+
+        parent=<Frame>: render inside that frame (launcher.py docks it beside
+        the embedded game). before_press() is called before every key tap and
+        must return True for the key to be sent; the launcher uses it to make
+        sure keys only ever go to the game window.
+        """
+        self.embedded = parent is not None
+        self.before_press = before_press
+        self.on_autopress_change = on_autopress_change
+        if self.embedded:
+            self.root = parent
+        else:
+            self.root = tk.Tk()
+            self.root.title("Phantasia Buttons")
+            self.root.overrideredirect(True)
+            self.root.attributes("-topmost", True)
+            self.root.attributes("-alpha", 0.95)
+            self.root.geometry("300x250+900+560")
         self.root.configure(bg=BG)
-        self.root.geometry("300x250+900+560")
 
         self.f_lbl = tkfont.Font(family="Segoe UI", size=9, weight="bold")
         self.f_num = tkfont.Font(family="Segoe UI", size=8)
@@ -110,11 +124,12 @@ class ButtonOverlay:
         self._last_press_sig = None
         self._last_press_at = 0.0
         self._last_bolt_type_sig = None
-        self._autopress = AUTO_PRESS
+        self._autopress = AUTO_PRESS if autopress is None else bool(autopress)
         self._flash = 0
 
         self._build()
-        self._bind()
+        if not self.embedded:
+            self._bind()
         threading.Thread(target=self._poll_loop, daemon=True).start()
         self._paint()
 
@@ -137,8 +152,12 @@ class ButtonOverlay:
             font=self.f_tiny,
         )
         self.auto_lbl.pack(side="right", padx=8)
-        tk.Label(self.bar, text="F8 auto  F9 hide", bg="#0f0d09", fg=DIM,
-                 font=self.f_tiny).pack(side="right", padx=8)
+        if self.embedded:
+            self.auto_lbl.configure(cursor="hand2")
+            self.auto_lbl.bind("<Button-1>", lambda e: self._toggle_autopress())
+        else:
+            tk.Label(self.bar, text="F8 auto  F9 hide", bg="#0f0d09", fg=DIM,
+                     font=self.f_tiny).pack(side="right", padx=8)
 
         # top hint line: the move + bolt amount / sub-steps
         self.hint = tk.Label(shell, text="waiting…", bg=BG, fg=DIM,
@@ -189,11 +208,23 @@ class ButtonOverlay:
         self._hidden = not self._hidden
 
     def _toggle_autopress(self):
-        self._autopress = not self._autopress
+        self.set_autopress(not self._autopress)
+
+    def set_autopress(self, on):
+        on = bool(on)
+        changed = on != self._autopress
+        self._autopress = on
         self.auto_lbl.configure(
             text="AUTO ON" if self._autopress else "AUTO OFF",
             fg=GREEN if self._autopress else RED,
         )
+        # forget what was pressed so turning it back on acts immediately
+        self._last_press_sig = None
+        if changed and self.on_autopress_change:
+            self.on_autopress_change(on)
+
+    def _allowed(self):
+        return self.before_press is None or bool(self.before_press())
 
     def _menu(self, e):
         m = tk.Menu(self.root, tearoff=0)
@@ -279,6 +310,8 @@ class ButtonOverlay:
                 return False
         if not 1 <= int(num) <= 8:
             return False
+        if not self._allowed():
+            return False
 
         key = str(num)
         sent = False
@@ -299,6 +332,8 @@ class ButtonOverlay:
 
         def worker():
             time.sleep(BOLT_TYPE_DELAY_S)
+            if not self._autopress or not self._allowed():
+                return
             if sys.platform.startswith("win"):
                 for ch in str(text):
                     self._send_windows_key(ch)
