@@ -61,6 +61,10 @@ DEFAULTS = {
     #                the same, but many clients (Java, .NET, scaled displays)
     #                stop taking clicks or get them in the wrong place.
     "embed_mode": "dock",
+    # dock mode: trim the game's title bar off. If that doesn't take on this
+    # PC (the game ends up over the toolbar/panel), the launcher notices and
+    # shows the game with its own title bar inside the game area instead.
+    "hide_titlebar": True,
     "panel": True,                # show the advisor panel
     "panel_width": 340,
     "close_client_on_exit": True,
@@ -74,6 +78,24 @@ EMBED_TIMEOUT_S = 45
 BROWSERS = ("chrome", "firefox", "edge", "opera", "brave", "vivaldi",
             "internet explorer")
 LOG_PATH = os.path.join(HOME, "launcher.log")
+
+# pythonw / --noconsole: there is no console, so print() and thread errors
+# would vanish (or crash code that writes to stderr). Send them to the log.
+if sys.stdout is None or sys.stderr is None:
+    try:
+        _logf = open(LOG_PATH, "a", encoding="utf-8", buffering=1)
+        sys.stdout = sys.stdout or _logf
+        sys.stderr = sys.stderr or _logf
+    except OSError:
+        pass
+
+
+def log(msg):
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%H:%M:%S')} {msg}\n")
+    except OSError:
+        pass
 BAR_BG = "#0f0d09"
 
 
@@ -102,6 +124,17 @@ if IS_WIN:
     from ctypes import wintypes
 
     user32 = ctypes.WinDLL("user32", use_last_error=True)
+
+    # Be DPI aware BEFORE any window exists. Otherwise, at 125%/150% display
+    # scaling Windows fakes our coordinates, and the game (often DPI aware)
+    # gets placed and clipped in the wrong spot -- e.g. over the toolbar.
+    try:
+        ctypes.WinDLL("shcore").SetProcessDpiAwareness(1)   # system aware
+    except Exception:
+        try:
+            user32.SetProcessDPIAware()
+        except Exception:
+            pass
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
     GWL_STYLE, GWL_EXSTYLE = -16, -20
@@ -158,6 +191,10 @@ if IS_WIN:
     user32.SetWindowRgn.argtypes = [wintypes.HWND, wintypes.HANDLE, wintypes.BOOL]
     user32.SetForegroundWindow.argtypes = [wintypes.HWND]
     user32.IsIconic.argtypes = [wintypes.HWND]
+    user32.IsZoomed.argtypes = [wintypes.HWND]
+    user32.WindowFromPoint.argtypes = [wintypes.POINT]
+    user32.WindowFromPoint.restype = wintypes.HWND
+    user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
     gdi32 = ctypes.WinDLL("gdi32")
     gdi32.CreateRectRgn.argtypes = [ctypes.c_int] * 4
     gdi32.CreateRectRgn.restype = wintypes.HANDLE
@@ -266,31 +303,75 @@ if IS_WIN:
             user32.ShowWindow(hwnd, SW_RESTORE)
         _SetWL(hwnd, GWLP_HWNDPARENT, owner or 0)
 
-    def place_docked(hwnd, area, stretch):
-        """Move the window so its CLIENT area covers `area` (screen rect),
-        and clip off everything outside the client area (title bar, borders)
-        so it looks built in and clicks there fall through to the launcher."""
+    def _target(hwnd, area, stretch, size):
+        """Where a rect of `size` goes inside `area`: filled or centred."""
         ax, ay, ar, ab = area
-        wl, wt, wr, wb = window_rect(hwnd)
-        cl, ct, cr, cb = client_screen_rect(hwnd)
-        left, top = cl - wl, ct - wt              # frame thickness
-        right, bottom = wr - cr, wb - cb
         resizable = bool(_GetWL(hwnd, GWL_STYLE) & WS_THICKFRAME)
         if stretch and resizable:
-            cw, ch = ar - ax, ab - ay
-            x, y = ax, ay
-        else:
-            cw, ch = cr - cl, cb - ct
-            x = ax + max(0, ((ar - ax) - cw) // 2)
-            y = ay + max(0, ((ab - ay) - ch) // 2)
-        user32.SetWindowPos(hwnd, None, x - left, y - top,
-                            cw + left + right, ch + top + bottom,
-                            SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW)
-        # actual client size after the move (fixed-size windows ignore us)
+            return ax, ay, ar - ax, ab - ay
+        w, h = size
+        return (ax + max(0, ((ar - ax) - w) // 2),
+                ay + max(0, ((ab - ay) - h) // 2), w, h)
+
+    def place_docked(hwnd, area, stretch, clip):
+        """Fit the game into `area` (screen rect).
+
+        clip=True: put the game's CLIENT area on `area` and cut off its title
+        bar/borders with a window region, so it looks built in.
+        clip=False: put the WHOLE window (title bar included) inside `area`.
+        Less seamless, but nothing can stick out over the toolbar."""
+        if user32.IsZoomed(hwnd):
+            user32.ShowWindow(hwnd, SW_RESTORE)
+        flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW
+        if not clip:
+            user32.SetWindowRgn(hwnd, None, True)
+            wl, wt, wr, wb = window_rect(hwnd)
+            x, y, w, h = _target(hwnd, area, stretch, (wr - wl, wb - wt))
+            user32.SetWindowPos(hwnd, None, x, y, w, h, flags)
+            return
+        cl, ct, cr, cb = client_screen_rect(hwnd)
+        x, y, cw, ch = _target(hwnd, area, stretch, (cr - cl, cb - ct))
+        for _ in range(3):      # measure, move, re-measure: frame sizes vary
+            wl, wt, wr, wb = window_rect(hwnd)
+            cl, ct, cr, cb = client_screen_rect(hwnd)
+            if (cl, ct, cr - cl, cb - ct) == (x, y, cw, ch):
+                break
+            left, top = cl - wl, ct - wt
+            right, bottom = wr - cr, wb - cb
+            user32.SetWindowPos(hwnd, None, x - left, y - top,
+                                cw + left + right, ch + top + bottom, flags)
+        # visible part = client area, and never anything outside `area`
         cl, ct, cr, cb = client_screen_rect(hwnd)
         wl, wt, _, _ = window_rect(hwnd)
-        rgn = gdi32.CreateRectRgn(cl - wl, ct - wt, cr - wl, cb - wt)
+        ax, ay, ar, ab = area
+        vl, vt = max(cl, ax), max(ct, ay)
+        vr, vb = min(cr, ar), min(cb, ab)
+        rgn = gdi32.CreateRectRgn(vl - wl, vt - wt, vr - wl, vb - wt)
         user32.SetWindowRgn(hwnd, rgn, True)     # system owns rgn now
+
+    def sticks_out(hwnd, area, panel_side):
+        """True if the game covers the launcher outside `area`.
+
+        Hit-testing honours window regions, so this checks what the user
+        actually sees and clicks: points on the toolbar just above the game
+        area, and on the advisor panel just right of it."""
+        ax, ay, ar, ab = area
+        pts = [(ax + 12, ay - 4), ((ax + ar) // 2, ay - 4), (ar - 12, ay - 4)]
+        if panel_side:
+            pts += [(ar + 6, ay + 40), (ar + 6, (ay + ab) // 2)]
+        for x, y in pts:
+            h = user32.WindowFromPoint(wintypes.POINT(x, y))
+            if h and user32.GetAncestor(h, GA_ROOT) == hwnd:
+                return True
+        return False
+
+    def describe(hwnd):
+        buf = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(hwnd, buf, 256)
+        return (f"title={window_title(hwnd)!r} class={buf.value!r} "
+                f"style={_GetWL(hwnd, GWL_STYLE) & 0xFFFFFFFF:#010x} "
+                f"exstyle={_GetWL(hwnd, GWL_EXSTYLE) & 0xFFFFFFFF:#010x} "
+                f"window={window_rect(hwnd)} client={client_screen_rect(hwnd)}")
 
     def undock(hwnd):
         user32.SetWindowRgn(hwnd, None, True)
@@ -379,13 +460,17 @@ class Launcher:
         self.searching_since = None
         self.proxy_note = ""
         self._placed = None
+        self._clip = True
         self._known_windows = set()
 
         self.root = tk.Tk()
+        # pixel sizes below are for 100% display scaling; scale them up
+        self.ui = max(1.0, self.root.winfo_fpixels("1i") / 96.0)
         self.root.title("Phantasia Advisor")
         self.root.configure(bg=BG)
-        self.root.geometry(self.cfg.get("geometry") or "1560x860+40+40")
-        self.root.minsize(640, 420)
+        self.root.geometry(self.cfg.get("geometry") or
+                           f"{self.px(1560)}x{self.px(860)}+40+40")
+        self.root.minsize(self.px(640), self.px(420))
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
         self._errors_shown = 0
 
@@ -416,7 +501,7 @@ class Launcher:
 
     # ------------------------------------------------------------ layout ---
     def _build(self):
-        bar = tk.Frame(self.root, bg=BAR_BG, height=30)
+        bar = tk.Frame(self.root, bg=BAR_BG, height=self.px(30))
         bar.pack(side="top", fill="x")
         bar.pack_propagate(False)
         tk.Label(bar, text="PHANTASIA ADVISOR", bg=BAR_BG, fg=GOLD,
@@ -451,7 +536,7 @@ class Launcher:
         self.body.pack(side="top", fill="both", expand=True)
 
         self.panel_frame = tk.Frame(self.body, bg=BG,
-                                    width=self.cfg["panel_width"])
+                                    width=self.px(self.cfg["panel_width"]))
         self.panel_frame.pack_propagate(False)
         self.divider = tk.Frame(self.body, bg=LINE, width=1)
         self.game = tk.Frame(self.body, bg="#000000", takefocus=1)
@@ -467,7 +552,8 @@ class Launcher:
         self.root.bind("<FocusIn>", self._on_focus)
 
         # right column: advisor on top, the auto-play button grid underneath
-        self.buttons_frame = tk.Frame(self.panel_frame, bg=BG, height=250)
+        self.buttons_frame = tk.Frame(self.panel_frame, bg=BG,
+                                      height=self.px(250))
         self.buttons_frame.pack(side="bottom", fill="x")
         self.buttons_frame.pack_propagate(False)
         tk.Frame(self.panel_frame, bg=LINE, height=1).pack(side="bottom", fill="x")
@@ -736,6 +822,9 @@ class Launcher:
                 best = best or hwnd    # shell launch: new window named Phantasia
         return best
 
+    def px(self, n):
+        return int(round(n * self.ui))
+
     def _docked(self):
         return self.cfg.get("embed_mode", "dock") != "reparent"
 
@@ -746,6 +835,8 @@ class Launcher:
         self.hwnd = hwnd
         self.native_size = client_size(hwnd)
         self._placed = None
+        self._clip = bool(self.cfg.get("hide_titlebar", True))
+        log(f"game window found: {describe(hwnd)}")
         if self._docked():
             dock(hwnd, self._top_hwnd())
             self.show_placeholder("")       # black backdrop behind the game
@@ -760,8 +851,8 @@ class Launcher:
         if not self.cfg.get("geometry"):
             w, h = self.native_size
             if w > 200 and h > 150:
-                pw = self.cfg["panel_width"] + 1 if self.cfg["panel"] else 0
-                self.root.geometry(f"{w + pw}x{h + 30}")
+                pw = self.px(self.cfg["panel_width"]) + 1 if self.cfg["panel"] else 0
+                self.root.geometry(f"{w + pw}x{h + self.px(30)}")
 
     def _fit(self):
         if not (IS_WIN and self.hwnd):
@@ -776,10 +867,22 @@ class Launcher:
                 return
             # re-place when the launcher moved/resized OR the game got moved
             # (e.g. Alt+Space > Move); cheap enough to check every tick
-            key = (area, client_screen_rect(self.hwnd))
+            key = (area, window_rect(self.hwnd), self._clip)
             if key != self._placed:
-                place_docked(self.hwnd, area, self.cfg["stretch"])
-                self._placed = (area, client_screen_rect(self.hwnd))
+                first = self._placed is None
+                place_docked(self.hwnd, area, self.cfg["stretch"], self._clip)
+                self._placed = (area, window_rect(self.hwnd), self._clip)
+                if first:
+                    log(f"placed (clip={self._clip}) area={area} "
+                        f"{describe(self.hwnd)}")
+            # The guarantee: the game must never cover the toolbar or panel.
+            # If trimming the title bar didn't take, show it inside instead.
+            if self._clip and sticks_out(self.hwnd, area, self.cfg["panel"]):
+                log("game covers the toolbar/panel; showing its title bar "
+                    "inside the game area instead")
+                self._clip = False
+                self._placed = None
+                self._fit()
             return
         gw, gh = self.game.winfo_width(), self.game.winfo_height()
         if self.cfg["stretch"] or not self.native_size:
