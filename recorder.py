@@ -126,17 +126,15 @@ class ScreenModel:
 
 
 def guess_button(raw_lines, buttons):
-    """Best guess at which button an input meant.
-
-    The client->server format isn't documented here yet; the first real
-    recordings will settle it (analyze.py prints the raw inputs). Until then:
-    a lone number 1-8 is read as that button."""
+    """Which button an input was. Client lines are a type digit plus data;
+    a button click is "1" + its 0-based position ("12" = 3rd button), as
+    seen in real recordings. Returns {"num": 1-8, "label"} or None."""
     for ln in reversed(raw_lines):
-        s = ln.strip()
-        if s.isdigit():
-            n = int(s)
-            if 1 <= n <= 8 and n - 1 < len(buttons):
-                return {"num": n, "label": buttons[n - 1] or "(blank)"}
+        m = re.match(r"^\s*1([0-7])\s*$", ln)
+        if m:
+            i = int(m.group(1))
+            if i < len(buttons):
+                return {"num": i + 1, "label": buttons[i] or "(blank)"}
     return None
 
 

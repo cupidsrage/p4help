@@ -79,9 +79,12 @@ Leave it on a second monitor while you play.
 ```
 If the game can't connect, run `ipconfig /flushdns`.
 
-**In-game, once per login:** open **Info → Stats**.
-Brains and Magic Level are *not* sent as packets — they only appear on that
-screen. Luckout runs on brains, so without it the advisor is flying blind.
+**Stats load automatically.** Brains, Magic Level and Poison are *not* sent as
+packets; they only appear on the Info → Stats sheet. The proxy now fetches that
+sheet itself (at login, after fights, on level-up, and once a minute while idle
+on the main menu) and keeps the reply off your screen, so you never need to
+open it. Turn off with `"auto_stats": false` in `launcher.json` or
+`app.py --no-auto-stats`.
 
 Flags: `-h <ip>` upstream · `-w <port>` dashboard · `--log raw.txt` capture traffic ·
 `--record [folder]` record screens + inputs for `analyze.py`
@@ -155,6 +158,7 @@ turns unspendable mana into hundreds of damage.
 
 - `launcher.py` — the all-in-one app window (run this, or `Phantasia.bat`)
 - `app.py` — proxy + web server + packet parser
+- `statsync.py` — quietly keeps the Info → Stats data current
 - `reroll.py` — scores character rolls and decides Reroll/Keep
 - `recorder.py` — records screens + your inputs; `analyze.py` — summarises them
 - `ui.html` — the dashboard

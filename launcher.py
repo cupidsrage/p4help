@@ -75,6 +75,9 @@ DEFAULTS = {
     "reroll_weights": {},         # e.g. {"Halfling": {"brains": 5}}
     # stats a kept roll MUST have at the class maximum (never kept otherwise)
     "reroll_require_max": ["speed"],
+    # quietly keep Info -> Stats data (brains, magic level, poison...)
+    # current without opening it in the game
+    "auto_stats": True,
     "record": True,               # record screens + inputs (recorder.py)
     "record_screenshots": False,  # also save a PNG of the game per input
     "geometry": "",
@@ -719,6 +722,7 @@ class Launcher:
     # ------------------------------------------------------------- proxy ---
     def _start_proxy(self):
         proxy.SERVER_HOST = self.cfg["server"] or proxy.SERVER_HOST
+        proxy.AUTO_STATS = bool(self.cfg.get("auto_stats", True))
         try:
             proxy.start(open_browser=False, background=True)
         except OSError:

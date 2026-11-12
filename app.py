@@ -40,6 +40,7 @@ import quests as Q
 import trove as TR
 import zones as ZN
 import reroll as RR
+import statsync as SS
 from planner import plan, FightState, score_moves, explain, might_of
 
 LISTEN_HOST = "127.0.0.1"
@@ -98,6 +99,7 @@ LOCK = threading.Lock()
 # gets a fresh Tracker, but the overlay's RollJudge lives on and caches by id.
 _CHAR_IDS = itertools.count(1)
 RECORDER = None   # recorder.Recorder, set by enable_recording()
+AUTO_STATS = True # quietly keep Info -> Stats data current (statsync.py)
 
 
 def snapshot_state():
@@ -154,6 +156,7 @@ class Tracker:
         self.roll_n = 0            # rolls for the current character
         self.experience = None
         self.poison = None          # from Info -> Stats ("Poison: 0.0000")
+        self.stats_due = True       # statsync: refresh the stat sheet soon
 
     # ---------- packet framing ----------
     def feed(self, text):
@@ -219,11 +222,16 @@ class Tracker:
         elif hdr == SWORD:
             p.sword = v
         elif hdr == LEVEL:
+            if p.level and v != p.level:
+                self.stats_due = True      # level-up: brains/ML changed
             p.level = v
         elif hdr == GOLD:
             self.gold = v
         elif hdr == NAME:
-            self.name = lines[0].strip() if lines else ""
+            name = lines[0].strip() if lines else ""
+            if name and name != self.name:
+                self.stats_due = True      # (new) character: fetch its sheet
+            self.name = name
         elif hdr == LOCATION:
             if len(lines) >= 3:
                 # Field order: line0 = x, line1 = y, line2 = place name.
@@ -277,20 +285,19 @@ class Tracker:
                 STATE["roll"] = None       # left the roll screen
 
     def client_input(self, text):
-        """What the game client sent (client -> server). Used only to learn
-        which class was clicked; the exact format isn't documented, so a
-        lone number N is read as button N (1-based) OR N+1 (0-based) and
-        reroll.py keeps whichever of those the rolled stats fit."""
+        """What the game client sent (client -> server). Lines are a type
+        digit plus data; a button click is "1" + its 0-based position, e.g.
+        "12" = third button (seen in recordings). Used to learn which class
+        was clicked on the class menu."""
         menu = self.class_menu
         if not menu:
             return
         for ln in text.split("\n"):
-            ln = ln.strip()
-            if ln.isdigit():
-                k = int(ln)
-                opts = {menu[i] for i in (k - 1, k) if 0 <= i < len(menu) and menu[i]}
-                if opts:
-                    self.class_pick = opts
+            m = re.match(r"^\s*1([0-7])\s*$", ln)
+            if m:
+                i = int(m.group(1))
+                if i < len(menu) and menu[i]:
+                    self.class_pick = {menu[i]}
 
     def _new_roll(self):
         p = self.p
@@ -677,6 +684,7 @@ class Tracker:
             STATE["fight"] = self.cur
 
     def end_fight(self):
+        self.stats_due = True
         self.cur = None
         self.cur_mon = None
         self.fs = None
@@ -792,13 +800,22 @@ class Web(BaseHTTPRequestHandler):
 
 
 # ---------- tcp proxy ----------
-def pump(src, dst, tracker=None, tap=None):
+def pump(src, dst, tracker=None, tap=None, send_lock=None, out_filter=None,
+         on_bytes=None):
     try:
         while True:
             data = src.recv(8192)
             if not data:
                 break
-            dst.sendall(data)
+            if on_bytes is not None:
+                on_bytes(data)
+            out = out_filter.filter(data) if out_filter is not None else data
+            if out:
+                if send_lock is not None:
+                    with send_lock:
+                        dst.sendall(out)
+                else:
+                    dst.sendall(out)
             if tap is not None:
                 try:
                     tap(data.decode("utf-8", errors="replace"))
@@ -847,11 +864,23 @@ def handle(client):
         if rec is not None:
             rec.client(text)
 
+    # statsync: quietly fetch our own stat sheet; the reply is kept from the
+    # game window by `replies` but still read by the tracker.
+    send_lock = threading.Lock()
+    replies = SS.ReplyFilter()
+    sync = SS.StatsSync(t, server, send_lock, replies, STATE, LOCK,
+                        enabled=AUTO_STATS)
+    threading.Thread(target=sync.run, daemon=True).start()
+
     a = threading.Thread(target=pump, daemon=True,
-                         args=(server, client, t, rec.server if rec else None))
+                         args=(server, client, t, rec.server if rec else None),
+                         kwargs={"out_filter": replies})
     b = threading.Thread(target=pump, daemon=True,
-                         args=(client, server, None, client_tap))
+                         args=(client, server, None, client_tap),
+                         kwargs={"send_lock": send_lock,
+                                 "on_bytes": sync.note_client})
     a.start(); b.start(); a.join(); b.join()
+    sync.alive = False
     if rec is not None:
         rec.close()
 
@@ -869,6 +898,9 @@ def parse_args(a):
     if "-l" in a: LISTEN_PORT = int(a[a.index("-l") + 1])
     if "-w" in a: WEB_PORT = int(a[a.index("-w") + 1])
     if "--log" in a: RAW_LOG = a[a.index("--log") + 1]
+    if "--no-auto-stats" in a:
+        global AUTO_STATS
+        AUTO_STATS = False
     if "--record" in a:
         i = a.index("--record")
         nxt = a[i + 1] if i + 1 < len(a) and not a[i + 1].startswith("-") else None
