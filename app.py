@@ -191,6 +191,12 @@ class Tracker:
     def feed(self, text):
         for line in text.split("\n"):
             self._line(line)
+        # Recompute fight advice once per batch of server data, not once per
+        # damage line: a round's "You hit..." and "...hit you" usually arrive
+        # together, and each recompute is a few thousand simulated fights.
+        if getattr(self, "_advice_dirty", False):
+            self._advice_dirty = False
+            self.refresh_advice()
 
     def _line(self, line):
         line = line.rstrip("\r")
@@ -621,7 +627,7 @@ class Tracker:
                 changed = True
 
             if changed:
-                self.refresh_advice()
+                self._advice_dirty = True
 
         cf = getattr(self, "cal_fight", None)
         if cf and CAL and ("you made it" in low or "you killed it" in low):
