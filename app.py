@@ -22,6 +22,7 @@ Local only. Per the Phantasia calc policy, building this is fine;
 distributing or advertising it is not.
 """
 
+import itertools
 import socket
 import threading
 import select
@@ -38,6 +39,7 @@ import monsters as MDB
 import quests as Q
 import trove as TR
 import zones as ZN
+import reroll as RR
 from planner import plan, FightState, score_moves, explain, might_of
 
 LISTEN_HOST = "127.0.0.1"
@@ -85,12 +87,16 @@ STATE = {
     "quest": None,
     "quest_offer": None,
     "rerolls": None,
+    "roll": None,       # character creation: the stats roll on screen (see reroll.py)
     "trove": None,
     "zone": None,
     "log": [],
     "buttons": [],
 }
 LOCK = threading.Lock()
+# Character-creation ids must stay unique across reconnects: each connection
+# gets a fresh Tracker, but the overlay's RollJudge lives on and caches by id.
+_CHAR_IDS = itertools.count(1)
 RECORDER = None   # recorder.Recorder, set by enable_recording()
 
 
@@ -141,6 +147,12 @@ class Tracker:
         self.fs = None             # live FightState
         self.await_luck = False    # a luckout is in flight
         self.prev_energy = None
+        # character creation
+        self.class_menu = None     # button labels while "which type?" is up
+        self.class_pick = None     # classes the player's click could mean
+        self.roll_char = 0         # bumps for every new character rolled
+        self.roll_n = 0            # rolls for the current character
+        self.experience = None
 
     # ---------- packet framing ----------
     def feed(self, text):
@@ -233,8 +245,10 @@ class Tracker:
         elif hdr == RING:
             p.ring = (lines[0].strip().lower() == "yes")
         elif hdr in (BUTTONS, FULL_BUTTONS):
+            labels = [line.strip() for line in lines]
             with LOCK:
-                STATE["buttons"] = [line.strip() for line in lines]
+                STATE["buttons"] = labels
+            self._creation_buttons(labels)
         elif hdr == WRITE_LINE:
             self._text(lines[0] if lines else "")
         elif hdr == PLAYER_INFO:
@@ -242,6 +256,53 @@ class Tracker:
                 self._text(ln)
 
         self.push()
+
+    # ---------- character creation ----------
+    def _creation_buttons(self, labels):
+        names = [RR.class_name(b) for b in labels]
+        if sum(1 for n in names if n) >= 4:
+            # "Which type of character do you want?": a new character
+            self.class_menu = names
+            self.class_pick = None
+            self.roll_char = next(_CHAR_IDS)
+            self.roll_n = 0
+            with LOCK:
+                STATE["roll"] = None
+            return
+        self.class_menu = None
+        low = [b.lower() for b in labels]
+        if not ("reroll" in low and "keep" in low):
+            with LOCK:
+                STATE["roll"] = None       # left the roll screen
+
+    def client_input(self, text):
+        """What the game client sent (client -> server). Used only to learn
+        which class was clicked; the exact format isn't documented, so a
+        lone number N is read as button N (1-based) OR N+1 (0-based) and
+        reroll.py keeps whichever of those the rolled stats fit."""
+        menu = self.class_menu
+        if not menu:
+            return
+        for ln in text.split("\n"):
+            ln = ln.strip()
+            if ln.isdigit():
+                k = int(ln)
+                opts = {menu[i] for i in (k - 1, k) if 0 <= i < len(menu) and menu[i]}
+                if opts:
+                    self.class_pick = opts
+
+    def _new_roll(self):
+        p = self.p
+        self.roll_n += 1
+        with LOCK:
+            STATE["roll"] = {
+                "char": self.roll_char, "n": self.roll_n,
+                "class_options": sorted(self.class_pick) if self.class_pick else None,
+                "stats": {"energy": p.energy, "strength": p.strength,
+                          "speed": p.quickness, "mana": p.mana,
+                          "brains": p.brains, "magiclvl": p.magiclvl,
+                          "experience": self.experience, "gold": self.gold},
+            }
 
     # ---------- server text ----------
     def _text(self, txt):
@@ -275,6 +336,11 @@ class Tracker:
         m = re.search(r"^\s*mana\s*:\s*([\d.]+)", low)
         if m:
             self.p.mana = float(m.group(1))
+        m = re.search(r"^\s*experience\s*:\s*([\d.]+)", low)
+        if m:
+            self.experience = float(m.group(1))
+        if "keep these stats" in low:
+            self._new_roll()
         m = re.search(r"^\s*gold\s*:\s*([\d.]+)", low)
         if m:
             self.gold = float(m.group(1))
@@ -728,7 +794,7 @@ def pump(src, dst, tracker=None, tap=None):
             if not data:
                 break
             dst.sendall(data)
-            if tap is not None and RECORDER is not None:
+            if tap is not None:
                 try:
                     tap(data.decode("utf-8", errors="replace"))
                 except Exception as e:
@@ -770,10 +836,16 @@ def handle(client):
     rec = RECORDER
     if rec is not None:
         rec.open()
+
+    def client_tap(text):
+        t.client_input(text)
+        if rec is not None:
+            rec.client(text)
+
     a = threading.Thread(target=pump, daemon=True,
                          args=(server, client, t, rec.server if rec else None))
     b = threading.Thread(target=pump, daemon=True,
-                         args=(client, server, None, rec.client if rec else None))
+                         args=(client, server, None, client_tap))
     a.start(); b.start(); a.join(); b.join()
     if rec is not None:
         rec.close()

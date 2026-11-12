@@ -69,6 +69,10 @@ DEFAULTS = {
     "panel_width": 340,
     "close_client_on_exit": True,
     "autoplay": False,            # auto-press the advisor's move in the game
+    # character creation (with auto-play on): reroll until a roll this good
+    # comes up -- about 1 in N rolls for the class. Higher = pickier, slower.
+    "reroll_target": 100,
+    "reroll_weights": {},         # e.g. {"Halfling": {"brains": 5}}
     "record": True,               # record screens + inputs (recorder.py)
     "record_screenshots": False,  # also save a PNG of the game per input
     "geometry": "",
@@ -583,7 +587,10 @@ class Launcher:
         self.buttons = ButtonOverlay(parent=self.buttons_frame,
                                      autopress=self.cfg["autoplay"],
                                      before_press=self._game_ready_for_keys,
-                                     on_autopress_change=self._autoplay_changed)
+                                     on_autopress_change=self._autoplay_changed,
+                                     reroll_opts={
+                                         "target_rolls": self.cfg.get("reroll_target", 100),
+                                         "weights": self.cfg.get("reroll_weights") or {}})
         self._paint_auto_btn()
         self._paint_rec_btn()
 
