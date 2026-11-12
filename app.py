@@ -24,6 +24,7 @@ distributing or advertising it is not.
 
 import itertools
 import socket
+import time
 import threading
 import select
 import re
@@ -89,6 +90,7 @@ STATE = {
     "quest_offer": None,
     "rerolls": None,
     "roll": None,       # character creation: the stats roll on screen (see reroll.py)
+    "prompt": "",       # the question the current buttons answer
     "trove": None,
     "zone": None,
     "log": [],
@@ -157,6 +159,9 @@ class Tracker:
         self.experience = None
         self.poison = None          # from Info -> Stats ("Poison: 0.0000")
         self.stats_due = True       # statsync: refresh the stat sheet soon
+        self.stats_at = 0.0         # when a stat sheet (Poison: line) was last read
+        self.fight_end_at = 0.0     # when the last fight ended
+        self.since_buttons = []     # text since the last button packet
 
     # ---------- packet framing ----------
     def feed(self, text):
@@ -255,8 +260,13 @@ class Tracker:
             p.ring = (lines[0].strip().lower() == "yes")
         elif hdr in (BUTTONS, FULL_BUTTONS):
             labels = [line.strip() for line in lines]
+            # the question these buttons answer: last "?" line since the
+            # previous set of buttons (none = a plain menu)
+            qs = [t for t in self.since_buttons if t.endswith("?")]
+            self.since_buttons = []
             with LOCK:
                 STATE["buttons"] = labels
+                STATE["prompt"] = qs[-1] if qs else ""
             self._creation_buttons(labels)
         elif hdr == WRITE_LINE:
             self._text(lines[0] if lines else "")
@@ -315,6 +325,8 @@ class Tracker:
     # ---------- server text ----------
     def _text(self, txt):
         low = txt.lower()
+        if txt.strip():
+            self.since_buttons = (self.since_buttons + [txt.strip()])[-30:]
 
         # ---- Info->Stats screen: the ONLY source of brains / magic level ----
         m = re.search(r"magic\s*level\s*:\s*([\d.]+)", low)
@@ -347,6 +359,7 @@ class Tracker:
         m = re.search(r"^\s*poison\s*:\s*([\d.]+)", low)
         if m:
             self.poison = float(m.group(1))
+            self.stats_at = time.time()
         m = re.search(r"^\s*experience\s*:\s*([\d.]+)", low)
         if m:
             self.experience = float(m.group(1))
@@ -685,6 +698,7 @@ class Tracker:
 
     def end_fight(self):
         self.stats_due = True
+        self.fight_end_at = time.time()
         self.cur = None
         self.cur_mon = None
         self.fs = None
@@ -751,6 +765,8 @@ class Tracker:
                 "sword": p.sword, "shield": p.shield, "ring": p.ring,
                 "gold": self.gold, "location": self.location,
                 "poison": self.poison,
+                # stat sheet read since the last fight ended (poison is current)
+                "stats_fresh": self.stats_at > 0 and self.stats_at >= self.fight_end_at,
             }
 
 

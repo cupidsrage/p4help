@@ -27,6 +27,10 @@ panel docked on the right. Close the window and everything shuts down.
   game for you: combat moves, the Spell → Magic Bolt → mana steps, and "More"
   prompts. It only types while the launcher window is in front, so alt-tabbing
   away pauses it. It's off by default and remembers your choice.
+- **Treasure & gold:** with Auto-play on, "Do you want to inspect it?" / "pick
+  them up?" questions get **Yes** when you're not poisoned and **No** when you
+  are. After a fight it first fetches a fresh stat sheet (quietly) to see whether
+  that fight poisoned you; if it can't tell, it says No.
 - **Auto-rest:** with Auto-play on, after a fight it presses **Rest** on the main
   menu until energy is full. If resting stops raising energy (poisoned, or energy
   draining) it stops after 3 tries, or after 1 if Info → Stats showed poison, and

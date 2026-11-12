@@ -26,6 +26,15 @@ QUIET_S = 1.5             # don't inject within this long of the player's input
 REPLY_TIMEOUT_S = 5.0     # stop waiting for a reply after this
 
 
+TREASURE_WORDS = ("treasure", "gold", "gem", "pick it up", "pick them up",
+                  "inspect")
+
+
+def is_treasure(prompt):
+    p = (prompt or "").lower()
+    return any(w in p for w in TREASURE_WORDS)
+
+
 class ReplyFilter:
     """Server -> client byte filter that drops the stat-sheet replies we
     asked for. Everything else passes through unchanged.
@@ -125,8 +134,12 @@ class StatsSync:
         with self.state_lock:
             labels = [str(b).strip().lower() for b in (self.state.get("buttons") or [])]
             busy = self.state.get("fight") or self.state.get("roll")
-        return (not busy and "rest" in labels
-                and ("move to" in labels or "hunt" in labels))
+            prompt = (self.state.get("prompt") or "").lower()
+        main_menu = "rest" in labels and ("move to" in labels or "hunt" in labels)
+        # a treasure/gold question after a fight: auto-play needs to know if
+        # that fight poisoned us before answering it
+        treasure = "yes" in labels and "no" in labels and is_treasure(prompt)
+        return not busy and (main_menu or treasure)
 
     def tick(self):
         now = time.time()
