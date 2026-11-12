@@ -728,11 +728,33 @@ class ButtonOverlay:
         # the grid and flash the submenu key instead. This keeps the highlighted
         # key matched to the button the player can press right now, including
         # after clearing an intervening More prompt.
+        # Find buttons by their LABEL on the menu actually showing, not by the
+        # 4.03 positions: on this server a fixed position could press a
+        # different spell (e.g. Magic Bolt instead of All or Nothing).
+        shown = [str(b).strip().lower() for b in (d.get("buttons") or [])]
+
+        def find(label):
+            want = label.lower()
+            for i, b in enumerate(shown):
+                if b and (b == want or b.startswith(want)):
+                    return i + 1
+            return None
+
         if sub is not None:
             spell_mode = self._spell_menu_visible()
             sub_label, sub_num = sub
-            current_num = sub_num if spell_mode and sub_num is not None else 4
+            current_num = find(sub_label) if spell_mode else find("spell")
+            if shown and current_num is None:
+                self._layout(spell_mode)
+                where = "spell menu" if spell_mode else "combat menu"
+                self.hint.configure(text=f"{sub_label}: not on the {where}", fg=AMBER)
+                self.sub.configure(text="(not pressing anything)")
+                return
+            if current_num is None:      # no button data yet: old positions
+                current_num = sub_num if spell_mode and sub_num is not None else 4
             self._layout(spell_mode)
+            if shown:
+                self._show_labels(d.get("buttons") or [])
             col = GREEN if self._flash else GREEN_HI
             self._light(current_num, col, GREEN_HI)
             press_sig = (
@@ -747,14 +769,13 @@ class ButtonOverlay:
                     text=f"Press {current_num} — BOLT ({amt} mana)",
                     fg=GREEN_HI)
                 self.sub.configure(
-                    text=f"① Spell (4)   ② Magic Bolt (2)   "
-                         f"③ type {amt}")
+                    text=f"\u2460 Spell   \u2461 Magic Bolt   \u2462 type {amt}")
                 bolt_type_sig = (
                     f.get("name"), mv.get("arg"), tuple(self._button_texts())
                 )
                 if (
                     spell_mode
-                    and current_num == 2
+                    and sub_label.lower() == "magic bolt"
                     and pressed_now
                     and self._last_bolt_type_sig != bolt_type_sig
                 ):
@@ -763,12 +784,18 @@ class ButtonOverlay:
             else:
                 self.hint.configure(text=f"Press {current_num} — {sub_label}",
                                     fg=GREEN_HI)
-                s = f"① Spell (4)   ② {sub_label}"
-                if sub_num:
-                    s += f" ({sub_num})"
-                self.sub.configure(text=s)
+                self.sub.configure(text=f"\u2460 Spell   \u2461 {sub_label}")
         else:
+            found = find(label)
+            if shown and found is None:
+                self._layout(False)
+                self.hint.configure(text=f"{label}: not on the combat menu", fg=AMBER)
+                self.sub.configure(text="(not pressing anything)")
+                return
+            num = found or num
             self._layout(False)
+            if shown:
+                self._show_labels(d.get("buttons") or [])
             col = GREEN if self._flash else GREEN_HI
             self._light(num, col, GREEN_HI)
             self._press_key(
