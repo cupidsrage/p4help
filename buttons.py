@@ -152,7 +152,7 @@ class ButtonOverlay:
                              (ALWAYS_EVADE if always_evade is None else always_evade)
                              if str(n).strip()]
         # resting after fights
-        self._rest_last_e = None     # energy when Rest was last pressed
+        self._rest_last_e = None     # best energy reached while resting
         self._rest_stalls = 0        # rests in a row that didn't raise energy
         self._rest_stopped = None    # energy we gave up at (stays until it moves)
         self._treasure_seen = None   # (prompt, labels) and when it appeared
@@ -582,16 +582,17 @@ class ButtonOverlay:
         self._reset_cells()
 
         if self._rest_stopped is not None:
-            # Stay stopped while energy holds or keeps dropping (poison
-            # drain). Resume only if it went UP (cured/healed); a new fight
-            # also clears the stop (see _update).
+            # Stay stopped while energy is at or below the best resting
+            # reached (holding, wobbling or draining from poison). Resume only
+            # if it goes higher than that (cured/healed); a new fight also
+            # clears the stop (see _update).
             if e <= self._rest_stopped:
-                self._rest_stopped = min(self._rest_stopped, e)
                 why = (f"poisoned ({poison:g})" if poison > 0
                        else "resting isn't raising it (poisoned?)")
                 self.hint.configure(text=f"Energy {e:g}/{mx:g}: stopped resting",
                                     fg=AMBER)
-                self.sub.configure(text=f"{why}; resumes when energy goes up")
+                self.sub.configure(text=f"{why}; best was {self._rest_stopped:g}, "
+                                        "resumes if energy goes above it")
                 return True
             self._rest_stopped = None           # energy went up: try again
             self._rest_last_e, self._rest_stalls = None, 0
@@ -599,13 +600,16 @@ class ButtonOverlay:
         col = GREEN if self._flash else GREEN_HI
         self._light(num, col, GREEN_HI)
         if self._press_key(num, ("rest", e), repeat_s=REST_REPEAT_S):
+            # Progress = a NEW HIGH. Poison can make energy wobble (up one
+            # rest, down the next); small rises that never beat the best so
+            # far don't count, so it can't rest forever.
             if self._rest_last_e is not None and e <= self._rest_last_e:
                 self._rest_stalls += 1
             else:
                 self._rest_stalls = 0
-            self._rest_last_e = e
+            self._rest_last_e = e if self._rest_last_e is None else max(self._rest_last_e, e)
             if self._rest_stalls >= (1 if poison > 0 else REST_STALLS):
-                self._rest_stopped = e
+                self._rest_stopped = self._rest_last_e
         self.hint.configure(text=f"Rest \u2192 button {num}", fg=GREEN_HI)
         self.sub.configure(text=f"energy {e:g}/{mx:g}"
                                 + (f" \u00b7 poisoned {poison:g}" if poison > 0 else ""))
