@@ -103,6 +103,7 @@ LOCK = threading.Lock()
 # gets a fresh Tracker, but the overlay's RollJudge lives on and caches by id.
 _CHAR_IDS = itertools.count(1)
 RECORDER = None   # recorder.Recorder, set by enable_recording()
+ZONE_MIN_INTERVAL_S = 300   # zone advice recalc (~5 s CPU) at most this often
 # Quietly fetch the Info -> Stats sheet (statsync.py). The first version sent
 # a malformed request (no NUL after the "5") and its reply filter could hold
 # data back; both fixed using a real recording of the client's own request.
@@ -738,9 +739,12 @@ class Tracker:
             STATE["fight"] = None
 
     def _zone_key(self):
+        # Only the character's lasting traits. Speed and strength wobble
+        # after nearly every fight (fatigue, gold weight, poison); keying on
+        # them reran the ~5 s recalc after most fights, which lagged
+        # auto-play more and more over a long session.
         p = self.p
-        return (p.level, p.brains, p.strength, p.quickness, p.magiclvl,
-                p.max_energy, p.sword, p.shield)
+        return (p.level, p.brains, p.magiclvl, p.max_energy)
 
     def push_zone(self):
         """Keep the zone advice current.
@@ -769,7 +773,11 @@ class Tracker:
             return                      # don't burn CPU mid-fight
         if getattr(self, "_zone_busy", False):
             return                      # one at a time
+        last = getattr(self, "_zone_ran_at", 0.0)
+        if rows is not None and time.time() - last < ZONE_MIN_INTERVAL_S:
+            return                      # at most once every few minutes
         self._zone_busy = True
+        self._zone_ran_at = time.time()
         self._zone_after_fight = False
         key = self._zone_key()
         snap = (self.p, self.xy, key)
