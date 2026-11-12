@@ -77,7 +77,7 @@ DEFAULTS = {
     "reroll_require_max": ["speed"],
     # quietly keep Info -> Stats data (brains, magic level, poison...)
     # current without opening it in the game
-    "auto_stats": True,
+    "quiet_stats": False,         # experimental: see app.AUTO_STATS
     # monsters auto-play always Evades, whatever the odds (name contains)
     "always_evade": ["Moron"],
     "record": True,               # record screens + inputs (recorder.py)
@@ -725,7 +725,9 @@ class Launcher:
     # ------------------------------------------------------------- proxy ---
     def _start_proxy(self):
         proxy.SERVER_HOST = self.cfg["server"] or proxy.SERVER_HOST
-        proxy.AUTO_STATS = bool(self.cfg.get("auto_stats", True))
+        # "auto_stats" (old key, saved as true in existing launcher.json files)
+        # is deliberately ignored: the quiet fetch locked up the live game.
+        proxy.AUTO_STATS = bool(self.cfg.get("quiet_stats", False))
         try:
             proxy.start(open_browser=False, background=True)
         except OSError:

@@ -32,8 +32,8 @@ panel docked on the right. Close the window and everything shuts down.
   the odds. Add names to flee from other monsters too.
 - **Treasure & gold:** with Auto-play on, "Do you want to inspect it?" / "pick
   them up?" questions get **Yes** when you're not poisoned and **No** when you
-  are. After a fight it first fetches a fresh stat sheet (quietly) to see whether
-  that fight poisoned you; if it can't tell, it says No.
+  are. "Poisoned" comes from Info → Stats or game text saying you were poisoned;
+  with no sign of poison it says Yes.
 - **Auto-rest:** with Auto-play on, after a fight it presses **Rest** on the main
   menu until energy is full. If resting stops raising energy (poisoned, or energy
   draining) it stops after 3 tries, or after 1 if Info → Stats showed poison, and
@@ -86,12 +86,10 @@ Leave it on a second monitor while you play.
 ```
 If the game can't connect, run `ipconfig /flushdns`.
 
-**Stats load automatically.** Brains, Magic Level and Poison are *not* sent as
-packets; they only appear on the Info → Stats sheet. The proxy now fetches that
-sheet itself (at login, after fights, on level-up, and once a minute while idle
-on the main menu) and keeps the reply off your screen, so you never need to
-open it. Turn off with `"auto_stats": false` in `launcher.json` or
-`app.py --no-auto-stats`.
+**In-game, once per login:** open **Info → Stats** so Brains, Magic Level and
+Poison load (they're not sent as packets). An automatic quiet fetch exists
+(`statsync.py`, `"quiet_stats": true` in `launcher.json`) but is **off**: on the
+live server it locked up the game.
 
 Flags: `-h <ip>` upstream · `-w <port>` dashboard · `--log raw.txt` capture traffic ·
 `--record [folder]` record screens + inputs for `analyze.py`

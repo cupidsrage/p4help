@@ -92,6 +92,7 @@ STATE = {
     "roll": None,       # character creation: the stats roll on screen (see reroll.py)
     "prompt": "",       # the question the current buttons answer
     "statsync": None,   # quiet stat-sheet fetches: sent / replies / last
+    "statsync_enabled": False,
     "trove": None,
     "zone": None,
     "log": [],
@@ -102,7 +103,10 @@ LOCK = threading.Lock()
 # gets a fresh Tracker, but the overlay's RollJudge lives on and caches by id.
 _CHAR_IDS = itertools.count(1)
 RECORDER = None   # recorder.Recorder, set by enable_recording()
-AUTO_STATS = True # quietly keep Info -> Stats data current (statsync.py)
+# Quietly fetch the Info -> Stats sheet (statsync.py). OFF: on the live
+# server the requests got no recognisable reply and the game locked up /
+# errored. Needs the real reply format from a recording before re-enabling.
+AUTO_STATS = False
 
 
 def snapshot_state():
@@ -357,6 +361,11 @@ class Tracker:
         m = re.search(r"^\s*mana\s*:\s*([\d.]+)", low)
         if m:
             self.p.mana = float(m.group(1))
+        # game text saying we got poisoned (the Stats sheet gives the
+        # exact value when opened; this just flags it in the meantime)
+        if "poisoned" in low and not re.search(r"^\s*poison\s*:", low):
+            if not self.poison:
+                self.poison = 1.0
         m = re.search(r"^\s*poison\s*:\s*([\d.]+)", low)
         if m:
             self.poison = float(m.group(1))
@@ -887,6 +896,8 @@ def handle(client):
     replies = SS.ReplyFilter()
     sync = SS.StatsSync(t, server, send_lock, replies, STATE, LOCK,
                         enabled=AUTO_STATS)
+    with LOCK:
+        STATE["statsync_enabled"] = AUTO_STATS
     threading.Thread(target=sync.run, daemon=True).start()
 
     a = threading.Thread(target=pump, daemon=True,
