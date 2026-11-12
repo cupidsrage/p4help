@@ -42,7 +42,12 @@ from statsync import is_treasure
 import rules as RU
 
 POLL_URL = "http://127.0.0.1:8420/state"
-REST_TOPUP = 0.25      # skip the last rest if less than this much of one is missing
+REST_TOPUP = 0.25
+# Questions with a fixed answer: (text in the question, button, why)
+FIXED_ANSWERS = [
+    ("pillage", "no", "pillaging adds 0.5 sin (misc.c): sin weakens a "
+                      "blessing, and druids and Wayland Smith shun sinners"),
+]      # skip the last rest if less than this much of one is missing
 POLL_MS = 150     # how often to read the proxy's state (local, cheap)
 PAINT_MS = 100
 AUTO_PRESS = (
@@ -120,7 +125,7 @@ MOVE_TO_BUTTON = {
 class ButtonOverlay:
     def __init__(self, parent=None, autopress=None, before_press=None,
                  on_autopress_change=None, reroll_opts=None,
-                 always_evade=None):
+                 always_evade=None, skip_low_value=True, mana_death=None):
         """parent=None: standalone floating window.
 
         parent=<Frame>: render inside that frame (launcher.py docks it beside
@@ -167,6 +172,10 @@ class ButtonOverlay:
                              if str(n).strip()]
         self.always_evade += [n.lower() for n in MUST_EVADE
                               if n.lower() not in self.always_evade]
+        # evade monsters not worth the age (see app.Tracker.worth_it)
+        self.skip_low_value = bool(skip_low_value)
+        # spend mana only when fighting without it is at least this deadly
+        self.mana_death = mana_death
         # resting after fights
         self._rest_last_e = None     # best energy reached while resting
         self._rest_stalls = 0        # rests in a row that didn't raise energy
@@ -498,7 +507,7 @@ class ButtonOverlay:
         return bool(btns and btns[0] == "more")
 
     @staticmethod
-    def _safe_move(f, p):
+    def _safe_move(f, p, mana_death=None):
         """The advisor's top move, unless a survival rule says otherwise.
 
         The advisor scores each fight on its own; a group of monsters (each
@@ -508,8 +517,24 @@ class ButtonOverlay:
         moves = f.get("moves") or []
         top = moves[0]
         death = lambda m: m.get("death", max(0.0, 1 - m.get("win", 0) - m.get("flee", 0)))
-        safest = min(moves, key=death)
         evade = next((m for m in moves if m.get("move") == "evade"), None)
+        # Mana is a last resort: the "safest" move is the safest one that
+        # spends no mana, unless all of those are at least mana_death
+        # deadly AND a mana move at least halves the risk.
+        import planner as PL
+        limit = PL.MANA_DEATH if mana_death is None else mana_death
+        free = [m for m in moves if m.get("move") not in PL.MANA_MOVES]
+        safest = min(free or moves, key=death)
+        if free and death(safest) >= limit:
+            paid = min(moves, key=death)
+            if death(paid) <= death(safest) / 2:
+                safest = paid
+        if (top.get("move") in PL.MANA_MOVES and free
+                and death(min(free, key=death)) < limit):
+            alt = min(free, key=lambda m: (death(m) > limit, -m.get("win", 0)))
+            if death(alt) < limit:
+                top = alt
+                top = dict(top, safety=f"saving mana: {death(alt)*100:.1f}% risk without it")
         e, mx = p.get("energy") or 0, p.get("max_energy") or 0
 
         def pick(m, why):
@@ -650,6 +675,25 @@ class ButtonOverlay:
         self._cfg(self.sub, text=why)
         return True
 
+    def _fixed_step(self, d):
+        """Questions that always get the same answer (FIXED_ANSWERS), e.g.
+        "You have found a village. Do you wish to pillage it?" -> No."""
+        labels = d.get("buttons") or []
+        low = [str(b).strip().lower() for b in labels]
+        prompt = (d.get("prompt") or "").lower()
+        for text, want, why in FIXED_ANSWERS:
+            if text in prompt and want in low:
+                num = low.index(want) + 1
+                self._show_labels(labels)
+                self._reset_cells()
+                col = AMBER if self._flash else GREEN_HI
+                self._light(num, col, GREEN_HI)
+                self._press_key(num, ("fixed", prompt, want))
+                self._cfg(self.hint, text=f"{want.title()} ({num})", fg=GREEN_HI)
+                self._cfg(self.sub, text=why)
+                return True
+        return False
+
     def _rest_step(self, d):
         """Out of combat on the main menu with energy below max: Rest until
         full. Stops when resting stops raising energy (poisoned, etc.).
@@ -751,6 +795,8 @@ class ButtonOverlay:
             return
 
         # Treasure / gold: Yes unless poisoned, then No
+        if self._fixed_step(d):
+            return
         if self._treasure_step(d):
             return
 
@@ -776,8 +822,12 @@ class ButtonOverlay:
         # in a fight: whatever stopped resting before no longer applies
         self._rest_last_e, self._rest_stalls, self._rest_stopped = None, 0, None
 
-        mv = self._safe_move(f, d.get("player") or {})
+        mv = self._safe_move(f, d.get("player") or {}, self.mana_death)
         forced = self._forced_evade(f.get("name"))
+        worth = f.get("worth") or {}
+        if (not forced and self.skip_low_value and worth.get("skip")
+                and not f.get("acted")):
+            forced = "not worth the age"
         if forced:
             ev = next((m for m in f["moves"] if m.get("move") == "evade"), {})
             mv = {"move": "evade", "arg": None, "win": ev.get("win", 0),
@@ -892,7 +942,10 @@ class ButtonOverlay:
             odds = f"{mv['win']*100:.0f}% win"
             if mv.get("flee", 0) > 0:
                 odds = f"{mv['flee']*100:.0f}% escape"
-            if mv.get("forced"):
+            if mv.get("forced") == "not worth the age":
+                odds = (f"not worth the age: ~{worth.get('exp', 0):,.0f} exp for "
+                        f"~{worth.get('rests', 0):.1f} rests \u00b7 " + odds)
+            elif mv.get("forced"):
                 odds = f"always evade \"{mv['forced']}\" \u00b7 " + odds
             elif mv.get("safety"):
                 odds = f"safety: {mv['safety']} \u00b7 " + odds

@@ -557,7 +557,7 @@ def true_cost(player, st, r, danger):
     # --- price of mana, scaled by danger ---
     # trivial monster: 1 mana ~ 6 energy (hoard it)
     # lethal monster:  1 mana ~ 0.5 energy (spend it, just live)
-    mana_price = 6.0 - 5.5 * danger
+    mana_price = max(3.0, 6.0 - 5.5 * danger)   # never cheap: it's hard to refill
 
     # --- dying dwarfs everything ---
     death_penalty = r.get("death", 0.0) * 800.0
@@ -602,8 +602,12 @@ def danger_of(player, mon, st):
 
 # ---------------------------------------------------------------- next move
 MANA_MOVES = {"bolt", "aon", "might", "paralyze", "haste", "forcefield"}
-NO_MANA_WIN = 0.95     # a no-mana plan this sure to win ...
-NO_MANA_DEATH = 0.02   # ... and this safe beats any plan that spends mana
+# Mana is hard to come by and dear at the posts: spend it only when every
+# way of fighting without it is at least this likely to get you killed.
+# (launcher.json "mana_death" sets it.)
+MANA_DEATH = 0.05
+NO_MANA_WIN = 0.90     # a no-mana plan this sure to win and no deadlier than
+                       # MANA_DEATH beats any plan that spends mana
 
 
 AON_ONLY_IF_DEATH = 0.50   # rank AoN first only if everything else is this deadly
@@ -739,7 +743,7 @@ def _score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
         nm = _score_moves(player, mon, st, trials=max(150, trials // 2),
                           mana_fallback=False, only=set(plain))
         good = [r for r in nm if r["win"] >= NO_MANA_WIN
-                and r["death"] <= NO_MANA_DEATH]
+                and r["death"] <= MANA_DEATH]
         if good:
             for r in good:
                 r["danger"] = danger_of(player, mon, st)
