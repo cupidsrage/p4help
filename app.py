@@ -175,6 +175,7 @@ class Tracker:
         self._shop_key = None
         self._shop = None
         self.quicksilver = 0.0
+        self.blind = False
         self.location = ""
         self.pending = None
         self.awaiting_count = False
@@ -496,6 +497,14 @@ class Tracker:
         m = re.search(r"^\s*blessing\s*:\s*(yes|no)", low)
         if m:
             self.p.blessing = m.group(1) == "yes"
+        if ("blinded you" in low or "world goes black" in low
+                or re.match(r"^\s*blind\s*:\s*yes", low)):
+            if not self.blind:
+                self.note("BLIND: monsters now show as 'A monster'.")
+            self.blind = True
+        if ("regained your sight" in low or "veil of darkness lifts" in low
+                or "athelas" in low or re.match(r"^\s*blind\s*:\s*no", low)):
+            self.blind = False
         if "changes into the form of a mimic" in low:
             self.note("It was a Mimic all along.")
         if "smurf berries" in low:
@@ -726,6 +735,9 @@ class Tracker:
                 if mh and cf:
                     # with the damage you'd dealt by then (melee wears it down)
                     cf["in"].append((float(mh.group(1)), sum(cf["out"])))
+
+            if "is still after you" in low and self.cur is not None:
+                self.cur["evade_fails"] = self.cur.get("evade_fails", 0) + 1
 
             # luckout resolved
             if "you blew it" in low and getattr(self, "cal_fight", None):
@@ -1001,7 +1013,7 @@ class Tracker:
         self.cur["moves"] = [{
             "move": x["move"], "arg": x["arg"], "win": x["win"],
             "flee": x["flee"], "death": x.get("death", 0.0),
-            "energy_lost": x["energy_lost"],
+            "energy_lost": x["energy_lost"], "mana": x.get("mana_spent", 0.0),
         } for x in moves]
         self.cur["why"] = explain(self.p, m, st, moves)
         if "worth" not in self.cur:
@@ -1165,7 +1177,7 @@ class Tracker:
                self.circle(), self.trove is not None, self.search is not None,
                self.age, self.degenerated, self.next_level_at,
                self.experience, round(p.sin or 0, 3), p.blessing, fight,
-               self.amulets)
+               self.amulets, self.blind)
         if key != self._notes_key:
             self._notes_key = key
             self._notes = self._make_notes()
@@ -1177,6 +1189,11 @@ class Tracker:
         # aging: permanent stat loss every 750 turns
         left = RU.turns_to_degeneration(self.age, self.degenerated)
         later = []                   # routine: shown after the urgent ones
+        if self.blind:
+            out.append("BLIND: every monster shows as 'A monster', so the "
+                       "advisor can't tell what you're fighting, and you can't "
+                       "read trove maps. Cures: a wandering medic (wants most "
+                       "of your gold), athelas from treasure, or ~0.75% a turn.")
         if left is not None:
             later.append(f"Next permanent stat loss in ~{left} turns (age "
                        f"{self.age:.0f}): every move, rest and fight counts.")

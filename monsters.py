@@ -151,7 +151,8 @@ SPECIAL_NOTES = {
     "Tit": "TITAN: shatters force fields and damages shields directly.",
     "Tra": "Transporter: can teleport you far away.",
     "U":   "UNICORN: can only be subdued with a Virgin.",
-    "W":   "WRAITH: can blind you.",
+    "W":   "WRAITH: 1 in 5 of its hits blinds you (lasts a long time). Kill it "
+           "fast; evading it rarely works and just gives it more hits.",
 }
 
 

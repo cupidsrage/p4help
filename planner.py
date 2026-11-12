@@ -610,7 +610,8 @@ NO_MANA_WIN = 0.90     # a no-mana plan this sure to win and no deadlier than
                        # MANA_DEATH beats any plan that spends mana
 
 
-AON_ONLY_IF_DEATH = 0.50   # rank AoN first only if everything else is this deadly
+AON_ONLY_IF_DEATH = 0.50
+MIN_EVADE = 0.25           # an Evade working less often than this isn't ranked first   # rank AoN first only if everything else is this deadly
 
 
 def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
@@ -619,6 +620,20 @@ def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
     surviving: a failed cast doubles the monster's strength and speed (a
     size-9 Cocodrill hit for 1551 after three failures and killed a player)."""
     res = _score_moves(player, mon, st, trials, mana_fallback, only)
+    # An Evade that rarely works isn't an escape: each failure gives the
+    # monster free hits. Don't rank it first while something else wins.
+    if (only is None and res and res[0]["move"] == "evade"
+            and res[0]["flee"] < MIN_EVADE):
+        alt = next((r for r in res[1:] if r["win"] >= 0.5), None)
+        if alt is not None:
+            res = [alt] + [r for r in res if r is not alt]
+    # Nick does 1 + sword damage and makes the monster 2 faster each time;
+    # it only "ties" because the rest of the fight is the same either way.
+    if only is None and res and res[0]["move"] == "nick":
+        alt = next((r for r in res[1:] if r["move"] != "nick"
+                    and r["win"] >= res[0]["win"] - 0.05), None)
+        if alt is not None:
+            res = [alt] + [r for r in res if r is not alt]
     if only is None and res and res[0]["move"] == "aon":
         # next move in the advisor's own ranking that's reasonably safe
         best = next((r for r in res[1:]
