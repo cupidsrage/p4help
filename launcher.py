@@ -85,6 +85,9 @@ DEFAULTS = {
     "always_evade": ["Moron"],
     # evade monsters whose experience isn't worth the age the fight costs
     "skip_low_value": True,
+    # spend mana only when every way of fighting without it is at least
+    # this likely to kill you (0.05 = 5%); lower = safer but more mana
+    "mana_death": 0.05,
     "record": True,               # record screens + inputs (recorder.py)
     "record_screenshots": False,  # also save a PNG of the game per input
     "geometry": "",
@@ -606,7 +609,8 @@ class Launcher:
                                          "weights": self.cfg.get("reroll_weights") or {},
                                          "require_max": self.cfg.get("reroll_require_max", ["speed"])},
                                      always_evade=self.cfg.get("always_evade", ["Moron"]),
-                                     skip_low_value=self.cfg.get("skip_low_value", True))
+                                     skip_low_value=self.cfg.get("skip_low_value", True),
+                                     mana_death=self.cfg.get("mana_death", 0.05))
         self._paint_auto_btn()
         self._paint_rec_btn()
 
@@ -753,6 +757,11 @@ class Launcher:
         # is deliberately ignored: the quiet fetch locked up the live game.
         proxy.AUTO_STATS = bool(self.cfg.get("background_stats", True))
         proxy.CAL_PATH = os.path.join(HOME, "calibration.json")
+        try:                      # the advisor's own mana threshold too
+            import planner
+            planner.MANA_DEATH = float(self.cfg.get("mana_death", 0.05))
+        except (ImportError, TypeError, ValueError):
+            pass
         try:
             proxy.start(open_browser=False, background=True)
         except OSError:

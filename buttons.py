@@ -125,7 +125,7 @@ MOVE_TO_BUTTON = {
 class ButtonOverlay:
     def __init__(self, parent=None, autopress=None, before_press=None,
                  on_autopress_change=None, reroll_opts=None,
-                 always_evade=None, skip_low_value=True):
+                 always_evade=None, skip_low_value=True, mana_death=None):
         """parent=None: standalone floating window.
 
         parent=<Frame>: render inside that frame (launcher.py docks it beside
@@ -174,6 +174,8 @@ class ButtonOverlay:
                               if n.lower() not in self.always_evade]
         # evade monsters not worth the age (see app.Tracker.worth_it)
         self.skip_low_value = bool(skip_low_value)
+        # spend mana only when fighting without it is at least this deadly
+        self.mana_death = mana_death
         # resting after fights
         self._rest_last_e = None     # best energy reached while resting
         self._rest_stalls = 0        # rests in a row that didn't raise energy
@@ -505,7 +507,7 @@ class ButtonOverlay:
         return bool(btns and btns[0] == "more")
 
     @staticmethod
-    def _safe_move(f, p):
+    def _safe_move(f, p, mana_death=None):
         """The advisor's top move, unless a survival rule says otherwise.
 
         The advisor scores each fight on its own; a group of monsters (each
@@ -515,8 +517,24 @@ class ButtonOverlay:
         moves = f.get("moves") or []
         top = moves[0]
         death = lambda m: m.get("death", max(0.0, 1 - m.get("win", 0) - m.get("flee", 0)))
-        safest = min(moves, key=death)
         evade = next((m for m in moves if m.get("move") == "evade"), None)
+        # Mana is a last resort: the "safest" move is the safest one that
+        # spends no mana, unless all of those are at least mana_death
+        # deadly AND a mana move at least halves the risk.
+        import planner as PL
+        limit = PL.MANA_DEATH if mana_death is None else mana_death
+        free = [m for m in moves if m.get("move") not in PL.MANA_MOVES]
+        safest = min(free or moves, key=death)
+        if free and death(safest) >= limit:
+            paid = min(moves, key=death)
+            if death(paid) <= death(safest) / 2:
+                safest = paid
+        if (top.get("move") in PL.MANA_MOVES and free
+                and death(min(free, key=death)) < limit):
+            alt = min(free, key=lambda m: (death(m) > limit, -m.get("win", 0)))
+            if death(alt) < limit:
+                top = alt
+                top = dict(top, safety=f"saving mana: {death(alt)*100:.1f}% risk without it")
         e, mx = p.get("energy") or 0, p.get("max_energy") or 0
 
         def pick(m, why):
@@ -804,7 +822,7 @@ class ButtonOverlay:
         # in a fight: whatever stopped resting before no longer applies
         self._rest_last_e, self._rest_stalls, self._rest_stopped = None, 0, None
 
-        mv = self._safe_move(f, d.get("player") or {})
+        mv = self._safe_move(f, d.get("player") or {}, self.mana_death)
         forced = self._forced_evade(f.get("name"))
         worth = f.get("worth") or {}
         if (not forced and self.skip_low_value and worth.get("skip")
