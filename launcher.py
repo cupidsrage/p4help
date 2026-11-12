@@ -73,6 +73,8 @@ DEFAULTS = {
     # comes up -- about 1 in N rolls for the class. Higher = pickier, slower.
     "reroll_target": 100,
     "reroll_weights": {},         # e.g. {"Halfling": {"brains": 5}}
+    # stats a kept roll MUST have at the class maximum (never kept otherwise)
+    "reroll_require_max": ["speed"],
     "record": True,               # record screens + inputs (recorder.py)
     "record_screenshots": False,  # also save a PNG of the game per input
     "geometry": "",
@@ -590,7 +592,8 @@ class Launcher:
                                      on_autopress_change=self._autoplay_changed,
                                      reroll_opts={
                                          "target_rolls": self.cfg.get("reroll_target", 100),
-                                         "weights": self.cfg.get("reroll_weights") or {}})
+                                         "weights": self.cfg.get("reroll_weights") or {},
+                                         "require_max": self.cfg.get("reroll_require_max", ["speed"])})
         self._paint_auto_btn()
         self._paint_rec_btn()
 
