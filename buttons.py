@@ -151,6 +151,7 @@ class ButtonOverlay:
         self._autopress = AUTO_PRESS if autopress is None else bool(autopress)
         self._flash = 0
         # character creation: Reroll until the stats are top-tier for the class
+        self._cfg_cache = {}         # widget -> last applied options
         self.judge = reroll.RollJudge(**(reroll_opts or {}))
         # monsters to always flee, whatever the odds (matched by name)
         self.always_evade = [str(n).strip().lower() for n in
@@ -188,7 +189,7 @@ class ButtonOverlay:
         )
         self.auto_lbl.pack(side="right", padx=8)
         if self.embedded:
-            self.auto_lbl.configure(cursor="hand2")
+            self._cfg(self.auto_lbl, cursor="hand2")
             self.auto_lbl.bind("<Button-1>", lambda e: self._toggle_autopress())
         else:
             tk.Label(self.bar, text="F8 auto  F9 hide", bg="#0f0d09", fg=DIM,
@@ -249,7 +250,7 @@ class ButtonOverlay:
         on = bool(on)
         changed = on != self._autopress
         self._autopress = on
-        self.auto_lbl.configure(
+        self._cfg(self.auto_lbl, 
             text="AUTO ON" if self._autopress else "AUTO OFF",
             fg=GREEN if self._autopress else RED,
         )
@@ -286,7 +287,7 @@ class ButtonOverlay:
         for label, num in layout:
             c = self.cells[num]
             if c["base"] != label:
-                c["label"].configure(text=label)
+                self._cfg(c["label"], text=label)
                 c["base"] = label
 
     def _paint(self):
@@ -300,27 +301,36 @@ class ButtonOverlay:
             except queue.Empty:
                 break
         try:
-            self._flash = (self._flash + 1) % 2
+            # steady highlight: blinking repainted the lit cell every tick
             self._update()
+            self._apply_cells()
         except tk.TclError:
             return
         self.root.after(PAINT_MS, self._paint)
 
+    # The lit cell is decided during _update and drawn once afterwards
+    # (_apply_cells), so a cell isn't reset and re-lit on every tick.
     def _reset_cells(self):
-        for c in self.cells.values():
-            c["frame"].configure(bg=PANEL, highlightbackground=LINE,
-                                  highlightthickness=1)
-            c["label"].configure(bg=PANEL, fg=INK)
-            c["num"].configure(bg=PANEL, fg=DIM)
+        self._lit = None
 
     def _light(self, num, color, hi):
-        c = self.cells.get(num)
-        if not c:
-            return
-        c["frame"].configure(bg=color, highlightbackground=hi,
-                             highlightthickness=3)
-        c["label"].configure(bg=color, fg="#0c0a07")
-        c["num"].configure(bg=color, fg="#0c0a07")
+        if num in self.cells:
+            self._lit = (num, color, hi)
+
+    def _apply_cells(self):
+        lit = getattr(self, "_lit", None)
+        for num, c in self.cells.items():
+            if lit and lit[0] == num:
+                _, color, hi = lit
+                self._cfg(c["frame"], bg=color, highlightbackground=hi,
+                          highlightthickness=3)
+                self._cfg(c["label"], bg=color, fg="#0c0a07")
+                self._cfg(c["num"], bg=color, fg="#0c0a07")
+            else:
+                self._cfg(c["frame"], bg=PANEL, highlightbackground=LINE,
+                          highlightthickness=1)
+                self._cfg(c["label"], bg=PANEL, fg=INK)
+                self._cfg(c["num"], bg=PANEL, fg=DIM)
 
 
     def _press_key(self, num, sig, *, repeat_same=False, repeat_s=KEY_REPEAT_S):
@@ -521,13 +531,24 @@ class ButtonOverlay:
         st = f.get("state") or {}
         return (st.get("rounds"), round(st.get("m_energy", -1), 1))
 
+    def _cfg(self, widget, **kw):
+        """widget.configure(**kw), but only for options whose value actually
+        changed. The grid repaints 10x a second; re-applying unchanged
+        settings made Tk redraw every widget every tick (900+ redraws per
+        5 s), which lagged the PC and left half-drawn labels on Windows."""
+        cache = self._cfg_cache.setdefault(id(widget), {})
+        changed = {k: v for k, v in kw.items() if cache.get(k, object()) != v}
+        if changed:
+            widget.configure(**changed)
+            cache.update(changed)
+
     def _show_labels(self, labels):
         """Show the game's actual button labels in the grid."""
         for num in range(1, 9):
             text = labels[num - 1] if num - 1 < len(labels) else ""
             c = self.cells[num]
             if c["base"] != text:
-                c["label"].configure(text=text)
+                self._cfg(c["label"], text=text)
                 c["base"] = text
 
     def _roll_screen(self, roll, labels):
@@ -536,8 +557,8 @@ class ButtonOverlay:
         self._reset_cells()
         n, cls = roll.get("n"), dec.get("class") or "?"
         if dec["action"] is None:
-            self.hint.configure(text=f"Roll {n}: can't judge", fg=AMBER)
-            self.sub.configure(text=dec["why"])
+            self._cfg(self.hint, text=f"Roll {n}: can't judge", fg=AMBER)
+            self._cfg(self.sub, text=dec["why"])
             return
         want = dec["action"]                       # "reroll" or "keep"
         low = [b.strip().lower() for b in labels]
@@ -548,14 +569,14 @@ class ButtonOverlay:
             self._press_key(num, ("roll", roll.get("char"), n, want),
                             repeat_s=ROLL_REPEAT_S)
         verb = "KEEP" if want == "keep" else "Reroll"
-        self.hint.configure(text=f"Roll {n} \u00b7 {cls} \u2192 {verb}"
+        self._cfg(self.hint, text=f"Roll {n} \u00b7 {cls} \u2192 {verb}"
                                  + (f" ({num})" if num else ""),
                             fg=GREEN_HI if want == "keep" else INK)
         if dec["score"] is not None and dec["need"] is not None:
-            self.sub.configure(text=f"score {dec['score']:.2f} / keep at "
+            self._cfg(self.sub, text=f"score {dec['score']:.2f} / keep at "
                                     f"{dec['need']:.2f} \u00b7 {dec['why']}")
         else:
-            self.sub.configure(text=dec["why"])
+            self._cfg(self.sub, text=dec["why"])
 
     def _treasure_step(self, d):
         """'You have found some treasure. Do you want to inspect it?' and the
@@ -578,8 +599,8 @@ class ButtonOverlay:
         self._show_labels(labels)
         self._reset_cells()
         if not fresh and d.get("statsync_enabled") and waited < TREASURE_WAIT_S:
-            self.hint.configure(text="Treasure: checking for poison\u2026", fg=INK)
-            self.sub.configure(text="reading your stats after that fight")
+            self._cfg(self.hint, text="Treasure: checking for poison\u2026", fg=INK)
+            self._cfg(self.sub, text="reading your stats after that fight")
             return True
         if poison is None:
             want, why = "yes", "poison unknown, no sign of it"
@@ -591,9 +612,9 @@ class ButtonOverlay:
         col = GREEN if self._flash else GREEN_HI
         self._light(num, col, GREEN_HI)
         self._press_key(num, ("treasure", key, want))
-        self.hint.configure(text=f"Treasure \u2192 {want.title()} ({num})",
+        self._cfg(self.hint, text=f"Treasure \u2192 {want.title()} ({num})",
                             fg=GREEN_HI if want == "yes" else AMBER)
-        self.sub.configure(text=why)
+        self._cfg(self.sub, text=why)
         return True
 
     def _rest_step(self, d):
@@ -622,9 +643,9 @@ class ButtonOverlay:
             if e <= self._rest_stopped:
                 why = (f"poisoned ({poison:g})" if poison > 0
                        else "resting isn't raising it (poisoned?)")
-                self.hint.configure(text=f"Energy {e:g}/{mx:g}: stopped resting",
+                self._cfg(self.hint, text=f"Energy {e:g}/{mx:g}: stopped resting",
                                     fg=AMBER)
-                self.sub.configure(text=f"{why}; best was {self._rest_stopped:g}, "
+                self._cfg(self.sub, text=f"{why}; best was {self._rest_stopped:g}, "
                                         "resumes if energy goes above it")
                 return True
             self._rest_stopped = None           # energy went up: try again
@@ -643,8 +664,8 @@ class ButtonOverlay:
             self._rest_last_e = e if self._rest_last_e is None else max(self._rest_last_e, e)
             if self._rest_stalls >= (1 if poison > 0 else REST_STALLS):
                 self._rest_stopped = self._rest_last_e
-        self.hint.configure(text=f"Rest \u2192 button {num}", fg=GREEN_HI)
-        self.sub.configure(text=f"energy {e:g}/{mx:g}"
+        self._cfg(self.hint, text=f"Rest \u2192 button {num}", fg=GREEN_HI)
+        self._cfg(self.sub, text=f"energy {e:g}/{mx:g}"
                                 + (f" \u00b7 poisoned {poison:g}" if poison > 0 else ""))
         return True
 
@@ -666,8 +687,8 @@ class ButtonOverlay:
             col = GREEN if self._flash else GREEN_HI
             self._light(1, col, GREEN_HI)
             self._press_key(1, ("more", tuple(self._button_texts())), repeat_same=True)
-            self.hint.configure(text="Press 1 — More", fg=GREEN_HI)
-            self.sub.configure(text="clear the text to continue")
+            self._cfg(self.hint, text="Press 1 — More", fg=GREEN_HI)
+            self._cfg(self.sub, text="clear the text to continue")
             return
 
         # Treasure / gold: Yes unless poisoned, then No
@@ -684,10 +705,13 @@ class ButtonOverlay:
         if not f or not f.get("name") or not f.get("moves"):
             if self._rest_step(d):
                 return
-            self._layout(False)
+            if d.get("buttons"):
+                self._show_labels(d.get("buttons"))   # the game's real menu
+            else:
+                self._layout(False)
             self._reset_cells()
-            self.hint.configure(text="No monster", fg=DIM)
-            self.sub.configure(text="")
+            self._cfg(self.hint, text="No monster", fg=DIM)
+            self._cfg(self.sub, text="")
             return
 
         # in a fight: whatever stopped resting before no longer applies
@@ -711,14 +735,14 @@ class ButtonOverlay:
         if labels and not ({"melee", "skirmish", "luckout", "evade"} & set(labels)
                            or self._spell_menu_visible()):
             self._layout(False)
-            self.hint.configure(text="Waiting for the combat menu", fg=DIM)
-            self.sub.configure(text="(not pressing fight keys on this screen)")
+            self._cfg(self.hint, text="Waiting for the combat menu", fg=DIM)
+            self._cfg(self.sub, text="(not pressing fight keys on this screen)")
             return
 
         if not info:
             self._layout(False)
-            self.hint.configure(text=f"{move}?", fg=AMBER)
-            self.sub.configure(text="(unmapped move)")
+            self._cfg(self.hint, text=f"{move}?", fg=AMBER)
+            self._cfg(self.sub, text="(unmapped move)")
             return
 
         label, num, sub = info
@@ -747,14 +771,15 @@ class ButtonOverlay:
             if shown and current_num is None:
                 self._layout(spell_mode)
                 where = "spell menu" if spell_mode else "combat menu"
-                self.hint.configure(text=f"{sub_label}: not on the {where}", fg=AMBER)
-                self.sub.configure(text="(not pressing anything)")
+                self._cfg(self.hint, text=f"{sub_label}: not on the {where}", fg=AMBER)
+                self._cfg(self.sub, text="(not pressing anything)")
                 return
             if current_num is None:      # no button data yet: old positions
                 current_num = sub_num if spell_mode and sub_num is not None else 4
-            self._layout(spell_mode)
             if shown:
                 self._show_labels(d.get("buttons") or [])
+            else:
+                self._layout(spell_mode)
             col = GREEN if self._flash else GREEN_HI
             self._light(current_num, col, GREEN_HI)
             press_sig = (
@@ -765,10 +790,10 @@ class ButtonOverlay:
 
             if move == "bolt" and mv.get("arg"):
                 amt = int(mv["arg"])
-                self.hint.configure(
+                self._cfg(self.hint, 
                     text=f"Press {current_num} — BOLT ({amt} mana)",
                     fg=GREEN_HI)
-                self.sub.configure(
+                self._cfg(self.sub, 
                     text=f"\u2460 Spell   \u2461 Magic Bolt   \u2462 type {amt}")
                 bolt_type_sig = (
                     f.get("name"), mv.get("arg"), tuple(self._button_texts())
@@ -782,20 +807,21 @@ class ButtonOverlay:
                     self._last_bolt_type_sig = bolt_type_sig
                     self._type_text_then_enter(amt)
             else:
-                self.hint.configure(text=f"Press {current_num} — {sub_label}",
+                self._cfg(self.hint, text=f"Press {current_num} — {sub_label}",
                                     fg=GREEN_HI)
-                self.sub.configure(text=f"\u2460 Spell   \u2461 {sub_label}")
+                self._cfg(self.sub, text=f"\u2460 Spell   \u2461 {sub_label}")
         else:
             found = find(label)
             if shown and found is None:
                 self._layout(False)
-                self.hint.configure(text=f"{label}: not on the combat menu", fg=AMBER)
-                self.sub.configure(text="(not pressing anything)")
+                self._cfg(self.hint, text=f"{label}: not on the combat menu", fg=AMBER)
+                self._cfg(self.sub, text="(not pressing anything)")
                 return
             num = found or num
-            self._layout(False)
             if shown:
                 self._show_labels(d.get("buttons") or [])
+            else:
+                self._layout(False)
             col = GREEN if self._flash else GREEN_HI
             self._light(num, col, GREEN_HI)
             self._press_key(
@@ -803,7 +829,7 @@ class ButtonOverlay:
                       False, num)
             )
             title = self.cells[num]["base"]
-            self.hint.configure(text=f"{title}  →  button {num}", fg=GREEN_HI)
+            self._cfg(self.hint, text=f"{title}  →  button {num}", fg=GREEN_HI)
             odds = f"{mv['win']*100:.0f}% win"
             if mv.get("flee", 0) > 0:
                 odds = f"{mv['flee']*100:.0f}% escape"
@@ -811,7 +837,7 @@ class ButtonOverlay:
                 odds = f"always evade \"{mv['forced']}\" \u00b7 " + odds
             elif mv.get("safety"):
                 odds = f"safety: {mv['safety']} \u00b7 " + odds
-            self.sub.configure(text=odds)
+            self._cfg(self.sub, text=odds)
 
     def run(self):
         self.root.mainloop()
