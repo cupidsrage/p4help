@@ -62,6 +62,9 @@ REST_STALLS = 3
 # Treasure: wait this long for a fresh stat sheet (is the last fight's poison
 # known?) before answering on the last known poison value.
 TREASURE_WAIT_S = 8.0
+# Monsters to Evade every round no matter what the advisor's odds say.
+# Matched case-insensitively against the monster's name ("A Moron").
+ALWAYS_EVADE = ["Moron"]
 
 BG    = "#16130e"
 PANEL = "#211c14"
@@ -103,7 +106,8 @@ MOVE_TO_BUTTON = {
 
 class ButtonOverlay:
     def __init__(self, parent=None, autopress=None, before_press=None,
-                 on_autopress_change=None, reroll_opts=None):
+                 on_autopress_change=None, reroll_opts=None,
+                 always_evade=None):
         """parent=None: standalone floating window.
 
         parent=<Frame>: render inside that frame (launcher.py docks it beside
@@ -143,6 +147,10 @@ class ButtonOverlay:
         self._flash = 0
         # character creation: Reroll until the stats are top-tier for the class
         self.judge = reroll.RollJudge(**(reroll_opts or {}))
+        # monsters to always flee, whatever the odds (matched by name)
+        self.always_evade = [str(n).strip().lower() for n in
+                             (ALWAYS_EVADE if always_evade is None else always_evade)
+                             if str(n).strip()]
         # resting after fights
         self._rest_last_e = None     # energy when Rest was last pressed
         self._rest_stalls = 0        # rests in a row that didn't raise energy
@@ -464,6 +472,11 @@ class ButtonOverlay:
         btns = self._button_texts()
         return bool(btns and btns[0] == "more")
 
+    def _forced_evade(self, name):
+        """The always-evade entry this monster matches, or None."""
+        low = (name or "").lower()
+        return next((n for n in self.always_evade if n in low), None)
+
     @staticmethod
     def _round(f):
         """The fight's round number. Part of every fight key's signature, so
@@ -637,6 +650,11 @@ class ButtonOverlay:
         self._rest_last_e, self._rest_stalls, self._rest_stopped = None, 0, None
 
         mv = f["moves"][0]
+        forced = self._forced_evade(f.get("name"))
+        if forced:
+            ev = next((m for m in f["moves"] if m.get("move") == "evade"), {})
+            mv = {"move": "evade", "arg": None, "win": ev.get("win", 0),
+                  "flee": ev.get("flee", 0), "forced": forced}
         move = mv["move"]
         info = MOVE_TO_BUTTON.get(move)
 
@@ -718,6 +736,8 @@ class ButtonOverlay:
             odds = f"{mv['win']*100:.0f}% win"
             if mv.get("flee", 0) > 0:
                 odds = f"{mv['flee']*100:.0f}% escape"
+            if mv.get("forced"):
+                odds = f"always evade \"{mv['forced']}\" \u00b7 " + odds
             self.sub.configure(text=odds)
 
     def run(self):
