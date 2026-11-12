@@ -731,6 +731,7 @@ class Launcher:
         # "auto_stats" (old key, saved as true in existing launcher.json files)
         # is deliberately ignored: the quiet fetch locked up the live game.
         proxy.AUTO_STATS = bool(self.cfg.get("background_stats", True))
+        proxy.CAL_PATH = os.path.join(HOME, "calibration.json")
         try:
             proxy.start(open_browser=False, background=True)
         except OSError:

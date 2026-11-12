@@ -27,6 +27,13 @@ panel docked on the right. Close the window and everything shuts down.
   game for you: combat moves, the Spell → Magic Bolt → mana steps, and "More"
   prompts. It only types while the launcher window is in front, so alt-tabbing
   away pauses it. It's off by default and remembers your choice.
+- **Learns real monster numbers:** the 4.03 tables may over- or under-state
+  monsters on this server, especially big sizes. After every fight you win by
+  damage (not luckout/spells) it compares what the monster really took and dealt
+  with the prediction, per size, and corrects future advice once a size has 3+
+  fights (saved in `calibration.json`; also learned from all `recordings/` at
+  startup). The advisor notes when a correction is in use. See it with
+  `python calibrate.py`.
 - **Survival rules (auto-play):** on top of the advisor's pick it takes the safest
   move (often Evade) when the pick has over 2% death risk, when you're under 30%
   energy and the fight isn't a near-certain win, and in a **group** (friends
@@ -171,6 +178,7 @@ turns unspendable mana into hundreds of damage.
 - `launcher.py` — the all-in-one app window (run this, or `Phantasia.bat`)
 - `app.py` — proxy + web server + packet parser
 - `statsync.py` — quietly keeps the Info → Stats data current
+- `calibrate.py` — learns real monster energy/strength per size from your fights
 - `reroll.py` — scores character rolls and decides Reroll/Keep
 - `recorder.py` — records screens + your inputs; `analyze.py` — summarises them
 - `ui.html` — the dashboard
