@@ -70,7 +70,10 @@ WEIGHTS = {
 }
 
 TARGET_ROLLS = 100   # pickiness: ~this many rolls on average to hit the bar
-HARD_STOP = 500      # never roll more than this for one character
+HARD_STOP = 500      # after this many, take the next roll that meets REQUIRE_MAX
+# Stats that MUST be at the class maximum, no matter what: a roll without
+# them is always rerolled (even past HARD_STOP). Speed decides initiative.
+REQUIRE_MAX = ("speed",)
 
 
 def class_name(label):
@@ -98,13 +101,14 @@ def infer_class(stats):
 
 class RollJudge:
     def __init__(self, weights=None, target_rolls=TARGET_ROLLS,
-                 hard_stop=HARD_STOP):
+                 hard_stop=HARD_STOP, require_max=REQUIRE_MAX):
         self.weights = {c: dict(w) for c, w in WEIGHTS.items()}
         for c, w in (weights or {}).items():
             if c in self.weights:
                 self.weights[c].update(w)
         self.target_rolls = max(1, int(target_rolls))
         self.hard_stop = hard_stop
+        self.require_max = tuple(s for s in (require_max or ()) if s in STATS)
         self._bar = {}           # class -> threshold score
         self.rolls = 0           # rolls seen for the current character
         self.cls = None
@@ -124,17 +128,33 @@ class RollJudge:
             den += w[s]
         return num / den if den else 1.0
 
+    def missing_max(self, stats, cls):
+        """Required stats that aren't at the class maximum, as text."""
+        out = []
+        for s in self.require_max:
+            hi = RANGES[cls][s][1]
+            if stats.get(s) is None or stats[s] < hi:
+                out.append(f"{s} {stats.get(s):g} < max {hi}"
+                           if stats.get(s) is not None else f"{s} unknown")
+        return out
+
     def bar(self, cls, samples=20000, seed=1):
-        """Score that a random roll beats with chance 1/target_rolls."""
+        """Score bar for rolls that already meet REQUIRE_MAX, set so that
+        overall about 1 roll in target_rolls is kept."""
         if cls not in self._bar:
             r = random.Random(seed)
             rng = RANGES[cls]
+            p_max = 1.0
+            for s in self.require_max:
+                lo, hi = rng[s]
+                p_max /= (hi - lo + 1)
             scores = sorted(
-                self.score({s: r.randint(lo, hi) for s, (lo, hi) in rng.items()},
-                           cls)
+                self.score({s: (hi if s in self.require_max else r.randint(lo, hi))
+                            for s, (lo, hi) in rng.items()}, cls)
                 for _ in range(samples))
-            i = int(len(scores) * (1 - 1 / self.target_rolls))
-            self._bar[cls] = scores[min(i, len(scores) - 1)]
+            top = min(1.0, 1.0 / (self.target_rolls * p_max))
+            i = int(len(scores) * (1 - top))
+            self._bar[cls] = scores[min(max(i, 0), len(scores) - 1)]
         return self._bar[cls]
 
     def decide(self, roll):
@@ -183,13 +203,19 @@ class RollJudge:
                    "rolls": self.rolls, "why": f"{cls} stats never change"}
         else:
             sc, need = self.score(stats, cls), self.bar(cls)
-            if sc >= need:
-                why = f"top 1-in-{self.target_rolls} roll for a {cls}"
+            missing = self.missing_max(stats, cls)
+            if missing:
+                why, act = "; ".join(missing), "reroll"    # never kept
+            elif sc >= need:
+                why = f"max {'/'.join(self.require_max) or 'stats'} and a " \
+                      f"top 1-in-{self.target_rolls} roll for a {cls}"
                 act = "keep"
             elif self.rolls >= self.hard_stop:
-                why, act = f"{self.rolls} rolls: taking this one", "keep"
+                why, act = (f"{self.rolls} rolls: taking this max-"
+                            f"{'/'.join(self.require_max)} roll"), "keep"
             else:
-                why, act = f"below the bar for a {cls}", "reroll"
+                why, act = f"max {'/'.join(self.require_max)}, other stats " \
+                           f"below the bar for a {cls}", "reroll"
             out = {"action": act, "class": cls, "score": round(sc, 3),
                    "need": round(need, 3), "rolls": self.rolls, "why": why}
         self.decided[n] = out

@@ -33,6 +33,8 @@ panel docked on the right. Close the window and everything shuts down.
   shows each roll's score and the bar. Change how picky it is with
   `"reroll_target"` in `launcher.json` (default 100; 300 = pickier and slower), and
   what counts as good with `"reroll_weights"`, e.g. `{"Halfling": {"brains": 5}}`.
+  A roll is **never** kept unless its speed is the class maximum (Halfling 35,
+  Fighter 37, Elf 40, ...); set other must-max stats with `"reroll_require_max"`.
 - **Recording (for teaching auto-play):** while **● Recording** is on, the launcher
   saves every screen you answer and what you pressed, plus your stats, the fight and
   the advisor's pick, to `recordings/` (one `.jsonl` dataset + readable `.txt` per
