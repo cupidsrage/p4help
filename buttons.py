@@ -41,13 +41,13 @@ import reroll
 from statsync import is_treasure
 
 POLL_URL = "http://127.0.0.1:8420/state"
-POLL_MS = 400
+POLL_MS = 150     # how often to read the proxy's state (local, cheap)
 PAINT_MS = 100
 AUTO_PRESS = (
     os.environ.get("P4HELP_BUTTONS_AUTO_PRESS", "1").lower()
     not in {"0", "false", "no", "off"}
 )
-KEY_DEBOUNCE_S = 0.35
+KEY_DEBOUNCE_S = 0.2
 KEY_REPEAT_S = 1.25
 BOLT_TYPE_DELAY_S = 0.35
 # A reroll repeats only if the same roll is STILL on screen this long after
@@ -464,6 +464,15 @@ class ButtonOverlay:
         btns = self._button_texts()
         return bool(btns and btns[0] == "more")
 
+    @staticmethod
+    def _round(f):
+        """The fight's round number. Part of every fight key's signature, so
+        each new round is a new decision and is pressed at once, instead of
+        waiting out the repeat timer when the same move wins round after
+        round (Melee, Melee, Melee...)."""
+        st = f.get("state") or {}
+        return (st.get("rounds"), round(st.get("m_energy", -1), 1))
+
     def _show_labels(self, labels):
         """Show the game's actual button labels in the grid."""
         for num in range(1, 9):
@@ -633,6 +642,17 @@ class ButtonOverlay:
 
         self._reset_cells()
 
+        # Only press fight keys while the game is actually showing the combat
+        # menu (or the spell submenu). Fight advice can outlive the fight; on
+        # a treasure question button 7 is "No", not "Evade".
+        labels = self._button_texts()
+        if labels and not ({"melee", "skirmish", "luckout", "evade"} & set(labels)
+                           or self._spell_menu_visible()):
+            self._layout(False)
+            self.hint.configure(text="Waiting for the combat menu", fg=DIM)
+            self.sub.configure(text="(not pressing fight keys on this screen)")
+            return
+
         if not info:
             self._layout(False)
             self.hint.configure(text=f"{move}?", fg=AMBER)
@@ -654,7 +674,7 @@ class ButtonOverlay:
             col = GREEN if self._flash else GREEN_HI
             self._light(current_num, col, GREEN_HI)
             press_sig = (
-                "fight", f.get("name"), move, mv.get("arg"),
+                "fight", f.get("name"), self._round(f), move, mv.get("arg"),
                 spell_mode, current_num,
             )
             pressed_now = self._press_key(current_num, press_sig)
@@ -690,7 +710,8 @@ class ButtonOverlay:
             col = GREEN if self._flash else GREEN_HI
             self._light(num, col, GREEN_HI)
             self._press_key(
-                num, ("fight", f.get("name"), move, mv.get("arg"), False, num)
+                num, ("fight", f.get("name"), self._round(f), move, mv.get("arg"),
+                      False, num)
             )
             title = self.cells[num]["base"]
             self.hint.configure(text=f"{title}  →  button {num}", fg=GREEN_HI)
