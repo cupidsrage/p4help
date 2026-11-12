@@ -71,6 +71,9 @@ def player_from(stats):
             setattr(p, k, float(stats[k]))
     p.ring = bool(stats.get("ring"))
     p.blessing = bool(stats.get("blessing"))
+    for k in ("holywater", "charms", "amulets", "gold", "gems", "quicksilver", "experience"):
+        setattr(p, k, float(stats.get(k) or 0))
+    p.virgin = bool(stats.get("virgin"))
     p.sin = float(stats.get("sin") or 0.0)
     p.max_energy = float(stats.get("max_energy") or stats.get("energy") or 100)
     p.energy = p.max_energy                       # rested
@@ -89,7 +92,8 @@ def monster(name, size, cal):
     er, sr = cal.ratios(size) if cal else (1.0, 1.0)
     return Monster(name=d["name"], strength=d["strength"] * sr, brains=d["brains"],
                    speed=d["speed"], energy=d["energy"] * er, shield=0.0,
-                   experience=d["experience"], specials=tuple(d["specials"]))
+                   experience=d["experience"], specials=tuple(d["specials"]),
+                    size=d["size"], treasure=d["treasure"])
 
 
 def fight(p, m):
@@ -186,7 +190,12 @@ def write_html(data, path):
                          f'<b>{html.escape(r["verdict"])}</b><br>{html.escape(mv)}'
                          f'<br><small>{r["death"]*100:.0f}% death</small></td>')
         mark = " 🗺" if MDB.MONSTERS[name][5] == RU.MAP_TREASURE_TYPE else ""
-        rows.append(f"<tr><th>{html.escape(name)}{mark}</th>{''.join(cells)}</tr>")
+        sm = MDB.server_special(name)
+        note = MDB.SERVER_NOTES.get(sm, "") if sm else ""
+        if sm in MDB.AVOID:
+            mark += " ⚠"
+        rows.append(f'<tr><th title="{html.escape(note)}">{html.escape(name)}{mark}</th>'
+                    f"{''.join(cells)}</tr>")
     eff = "".join(f"<tr><td>{html.escape(e['stat'])}</td><td>{e['fights_made_safe']:+d}</td>"
                   f"<td>{e['death_cut']:+.2f}</td></tr>" for e in data["effects"])
     stat_line = " · ".join(f"{k} {st.get(k)}" for k in
@@ -203,7 +212,8 @@ small{{opacity:.85}} h2{{color:#d4b03a}} input{{margin:6px 0;padding:4px;width:2
 <h2>Bestiary</h2>
 <p>Built {data['made']} from your stats: {html.escape(stat_line)} (full energy and mana).
 Hover a cell for win / death / energy / mana / treasure chance. Monsters
-marked 🗺 drop trove maps. Corrections from your own fights are
+marked 🗺 drop trove maps; ⚠ marks monsters whose special does lasting harm
+(auto-play runs from them). Hover a name for what its special does. Corrections from your own fights are
 included where a size has enough of them.</p>
 <h3>What stats do what</h3>
 <p>Every fight re-simulated with one stat raised. "Fights made safe" = how many
