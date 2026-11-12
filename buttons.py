@@ -42,7 +42,12 @@ from statsync import is_treasure
 import rules as RU
 
 POLL_URL = "http://127.0.0.1:8420/state"
-REST_TOPUP = 0.25      # skip the last rest if less than this much of one is missing
+REST_TOPUP = 0.25
+# Questions with a fixed answer: (text in the question, button, why)
+FIXED_ANSWERS = [
+    ("pillage", "no", "pillaging adds 0.5 sin (misc.c): sin weakens a "
+                      "blessing, and druids and Wayland Smith shun sinners"),
+]      # skip the last rest if less than this much of one is missing
 POLL_MS = 150     # how often to read the proxy's state (local, cheap)
 PAINT_MS = 100
 AUTO_PRESS = (
@@ -650,6 +655,25 @@ class ButtonOverlay:
         self._cfg(self.sub, text=why)
         return True
 
+    def _fixed_step(self, d):
+        """Questions that always get the same answer (FIXED_ANSWERS), e.g.
+        "You have found a village. Do you wish to pillage it?" -> No."""
+        labels = d.get("buttons") or []
+        low = [str(b).strip().lower() for b in labels]
+        prompt = (d.get("prompt") or "").lower()
+        for text, want, why in FIXED_ANSWERS:
+            if text in prompt and want in low:
+                num = low.index(want) + 1
+                self._show_labels(labels)
+                self._reset_cells()
+                col = AMBER if self._flash else GREEN_HI
+                self._light(num, col, GREEN_HI)
+                self._press_key(num, ("fixed", prompt, want))
+                self._cfg(self.hint, text=f"{want.title()} ({num})", fg=GREEN_HI)
+                self._cfg(self.sub, text=why)
+                return True
+        return False
+
     def _rest_step(self, d):
         """Out of combat on the main menu with energy below max: Rest until
         full. Stops when resting stops raising energy (poisoned, etc.).
@@ -751,6 +775,8 @@ class ButtonOverlay:
             return
 
         # Treasure / gold: Yes unless poisoned, then No
+        if self._fixed_step(d):
+            return
         if self._treasure_step(d):
             return
 
