@@ -153,6 +153,7 @@ class Tracker:
         self.roll_char = 0         # bumps for every new character rolled
         self.roll_n = 0            # rolls for the current character
         self.experience = None
+        self.poison = None          # from Info -> Stats ("Poison: 0.0000")
 
     # ---------- packet framing ----------
     def feed(self, text):
@@ -336,6 +337,9 @@ class Tracker:
         m = re.search(r"^\s*mana\s*:\s*([\d.]+)", low)
         if m:
             self.p.mana = float(m.group(1))
+        m = re.search(r"^\s*poison\s*:\s*([\d.]+)", low)
+        if m:
+            self.poison = float(m.group(1))
         m = re.search(r"^\s*experience\s*:\s*([\d.]+)", low)
         if m:
             self.experience = float(m.group(1))
@@ -738,6 +742,7 @@ class Tracker:
                 "brains": p.brains, "magiclvl": p.magiclvl, "level": p.level,
                 "sword": p.sword, "shield": p.shield, "ring": p.ring,
                 "gold": self.gold, "location": self.location,
+                "poison": self.poison,
             }
 
 

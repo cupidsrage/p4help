@@ -53,6 +53,11 @@ BOLT_TYPE_DELAY_S = 0.35
 # pressing (the key got lost). Shorter would risk rerolling the next roll
 # before it's been judged.
 ROLL_REPEAT_S = 3.0
+# Resting: press Rest again as soon as energy changes, or after this long if
+# it didn't. REST_STALLS rests in a row that don't raise energy = stop (it
+# can't fill: poisoned, or something else is draining it). 1 if poisoned.
+REST_REPEAT_S = 2.0
+REST_STALLS = 3
 
 BG    = "#16130e"
 PANEL = "#211c14"
@@ -134,6 +139,10 @@ class ButtonOverlay:
         self._flash = 0
         # character creation: Reroll until the stats are top-tier for the class
         self.judge = reroll.RollJudge(**(reroll_opts or {}))
+        # resting after fights
+        self._rest_last_e = None     # energy when Rest was last pressed
+        self._rest_stalls = 0        # rests in a row that didn't raise energy
+        self._rest_stopped = None    # energy we gave up at (stays until it moves)
 
         self._build()
         if not self.embedded:
@@ -486,6 +495,54 @@ class ButtonOverlay:
         else:
             self.sub.configure(text=dec["why"])
 
+    def _rest_step(self, d):
+        """Out of combat on the main menu with energy below max: Rest until
+        full. Stops when resting stops raising energy (poisoned, etc.).
+        Returns True when it handled the panel."""
+        p = d.get("player") or {}
+        e, mx = p.get("energy"), p.get("max_energy")
+        labels = [str(b).strip().lower() for b in (d.get("buttons") or [])]
+        on_main_menu = "rest" in labels and ("move to" in labels or "hunt" in labels)
+        if not e or not mx or e >= mx:
+            self._rest_last_e, self._rest_stalls, self._rest_stopped = None, 0, None
+            return False
+        if not on_main_menu:
+            return False
+        poison = p.get("poison") or 0
+        num = labels.index("rest") + 1
+        self._show_labels(d.get("buttons") or [])
+        self._reset_cells()
+
+        if self._rest_stopped is not None:
+            # Stay stopped while energy holds or keeps dropping (poison
+            # drain). Resume only if it went UP (cured/healed); a new fight
+            # also clears the stop (see _update).
+            if e <= self._rest_stopped:
+                self._rest_stopped = min(self._rest_stopped, e)
+                why = (f"poisoned ({poison:g})" if poison > 0
+                       else "resting isn't raising it (poisoned?)")
+                self.hint.configure(text=f"Energy {e:g}/{mx:g}: stopped resting",
+                                    fg=AMBER)
+                self.sub.configure(text=f"{why}; resumes when energy goes up")
+                return True
+            self._rest_stopped = None           # energy went up: try again
+            self._rest_last_e, self._rest_stalls = None, 0
+
+        col = GREEN if self._flash else GREEN_HI
+        self._light(num, col, GREEN_HI)
+        if self._press_key(num, ("rest", e), repeat_s=REST_REPEAT_S):
+            if self._rest_last_e is not None and e <= self._rest_last_e:
+                self._rest_stalls += 1
+            else:
+                self._rest_stalls = 0
+            self._rest_last_e = e
+            if self._rest_stalls >= (1 if poison > 0 else REST_STALLS):
+                self._rest_stopped = e
+        self.hint.configure(text=f"Rest \u2192 button {num}", fg=GREEN_HI)
+        self.sub.configure(text=f"energy {e:g}/{mx:g}"
+                                + (f" \u00b7 poisoned {poison:g}" if poison > 0 else ""))
+        return True
+
     def _update(self):
         d = self.data
         f = d.get("fight")
@@ -511,11 +568,16 @@ class ButtonOverlay:
             return
 
         if not f or not f.get("name") or not f.get("moves"):
+            if self._rest_step(d):
+                return
             self._layout(False)
             self._reset_cells()
             self.hint.configure(text="No monster", fg=DIM)
             self.sub.configure(text="")
             return
+
+        # in a fight: whatever stopped resting before no longer applies
+        self._rest_last_e, self._rest_stalls, self._rest_stopped = None, 0, None
 
         mv = f["moves"][0]
         move = mv["move"]
