@@ -89,6 +89,24 @@ which some clients won't take clicks in),
 `panel_width`, `close_client_on_exit`, `autoplay`, `record`,
 `record_screenshots`.
 
+## Self-play
+
+**Self-play** (toolbar) plays the game on its own: it walks to the
+deepest circle where you survive 20 encounters at least 95% of the time
+(`self_play_risk` in `launcher.json`), hunts there, rests, and walks to
+trading posts to buy whatever makes you safest. It turns Auto-play on; Auto-play
+still fights. It follows the server source:
+
+- Trading posts are at |x| = |y| = 100 x n^2: (100,100) sells Mana and
+  Shield, (400,400) adds Books, (900,900) Amulets, (1600,1600) Swords.
+- Below level 20 it never spends more than 350 x level + 150 gold per post
+  visit (more can get you called a thief and thrown into the Cracks of Doom).
+- Compass steps use the numeric keypad; the last step onto a post uses Move To.
+- It keeps the Virgin, refuses rings, doesn't frisk corpses or pillage,
+  reads scrolls, and offers the medic enough to be sure of a cure.
+
+Stop it any time with the Self-play button. The game window has to stay in front.
+
 ## Run it (proxy only)
 
 ```

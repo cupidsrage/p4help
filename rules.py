@@ -207,3 +207,115 @@ def blessing_rolls(sin):
     if not sin or sin <= 0:
         return None                     # always first
     return max(0, 6 - math.floor((sin + 1.0) / 1.25))
+
+
+# ---------------------------------------------------------------- moving
+D_CIRCLE = 125.0
+COMPASS = {             # direction -> (dx, dy) for one step
+    "N": (0, 1), "S": (0, -1), "E": (1, 0), "W": (-1, 0),
+    "NE": (1, 1), "NW": (-1, 1), "SE": (1, -1), "SW": (-1, -1),
+}
+
+
+def circle_of(x, y):
+    return int(math.floor(math.hypot(x, y) / D_CIRCLE) + 1)
+
+
+def max_move(level, circle):
+    """Squares one compass step covers (misc.c Do_maxmove): 1.5 x level +
+    1.5, at most 100; in circles 20-35 only level/50 + 1.5, at most 10.
+    Diagonal steps cover floor(that x 0.707) on each axis."""
+    if 19 < circle < 36:
+        return int(min(math.ceil(level / 50.0) + 1.5, 10.0))
+    return int(min(math.floor(level * 1.5 + 1.5), 100.0))
+
+
+def angle_move(level, circle):
+    return int(max(1.0, math.floor(max_move(level, circle) * .707106781)))
+
+
+def step_toward(x, y, tx, ty, level):
+    """Next move from (x, y) toward (tx, ty). Compass steps always cover the
+    full distance (main.c), so once the target is within one step it's a
+    "Move To" with exact coordinates (allowed up to Do_maxmove away).
+    Returns ("moveto", tx, ty), (compass direction, landing x, landing y),
+    or None when already there."""
+    dx, dy = tx - x, ty - y
+    if dx == 0 and dy == 0:
+        return None
+    c = circle_of(x, y)
+    full, diag = max_move(level, c), angle_move(level, c)
+    if math.hypot(dx, dy) <= full:
+        return "moveto", tx, ty
+    opts = [(n, x + v[0] * (diag if v[0] and v[1] else full),
+             y + v[1] * (diag if v[0] and v[1] else full))
+            for n, v in COMPASS.items()]
+    n, lx, ly = min(opts, key=lambda o: math.hypot(tx - o[1], ty - o[2]))
+    return n, lx, ly
+
+
+# ---------------------------------------------------------------- trading posts
+SHOP_ITEMS = ["Mana", "Shield", "Book", "Amulet", "Sword", "Quicksilver", "Blessing"]
+
+
+def posts(max_n=6):
+    """Every trading post: |x| == |y| == 100 x n^2 (main.c), with what it
+    sells (commands.c: the first sqrt(|x|/100) + 1 items; Blessing only at
+    the n=5 post)."""
+    out = []
+    for n in range(1, max_n + 1):
+        d = 100 * n * n
+        size = n + 1
+        size = 7 if size == 6 else min(6, size)
+        for sx in (1, -1):
+            for sy in (1, -1):
+                out.append({"x": sx * d, "y": sy * d, "items": SHOP_ITEMS[:size],
+                            "circle": circle_of(d, d)})
+    return out
+
+
+def is_post(x, y):
+    if abs(x) != abs(y) or x == 0:
+        return False
+    r = math.sqrt(abs(x) / 100.0)
+    return r == math.floor(r)
+
+
+def nearest_post(x, y, item=None, max_circle=None):
+    best = None
+    for p in posts():
+        if item and item not in p["items"]:
+            continue
+        if max_circle and p["circle"] > max_circle:
+            continue
+        d = math.hypot(p["x"] - x, p["y"] - y)
+        if best is None or d < best[0]:
+            best = (d, p)
+    return best[1] if best else None
+
+
+def thief_cap(level):
+    """Below level 20, spending more than 350 x level + 150 in one visit can
+    get you called a thief and thrown into the Cracks of Doom (commands.c).
+    Stay at or under this per visit."""
+    if level >= 20:
+        return float("inf")
+    return 350.0 * level + 150.0
+
+
+# ---------------------------------------------------------------- medic
+def medic_offer(gold, level, poison=0.0, blind=False):
+    """Gold to offer a wandering medic (misc.c Do_medic), or None to refuse.
+    Poison: he needs at least your level and poison^2.5; he accepts with
+    chance (2 - 0.1 x poison) x offer / your gold (so ~55% of your gold is
+    near certain for light poison). Blindness: chance offer / your gold."""
+    if gold <= 0:
+        return None
+    if blind:
+        return float(math.floor(gold))
+    if poison <= 0:
+        return None
+    need = max(level, poison ** 2.5)
+    k = max(1.0, 2.0 - 0.1 * poison)
+    offer = max(need, min(gold, math.ceil(gold / k * 1.05)))
+    return float(math.floor(offer)) if offer <= gold else None

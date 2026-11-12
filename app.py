@@ -80,7 +80,13 @@ LINECOUNT = {
     # which arrives right after a button block -- was never being read.
     BUTTONS: 8,
     FULL_BUTTONS: 8,
+    # dialogs (phantdefs.h): the question text follows on one line
+    22: 1,          # STRING_DIALOG: type an answer (amounts, names)
+    23: 1,          # COORDINATES_DIALOG: Move To / Teleport
+    24: 1,          # PLAYER_DIALOG
+    25: 1,          # PASSWORD_DIALOG
 }
+DIALOGS = {22: "string", 23: "coords", 24: "player", 25: "password"}
 
 # ---- shared live state (read by the web server) ----
 STATE = {
@@ -98,6 +104,7 @@ STATE = {
     "statsync_enabled": False,
     "trove": None,
     "zone": None,
+    "dialog": None,     # a typed-answer question on screen: {"kind", "text", "at"}
     "log": [],
     "buttons": [],
 }
@@ -340,7 +347,15 @@ class Tracker:
                 self.push_zone()
         elif hdr == RING:
             p.ring = (lines[0].strip().lower() == "yes")
+        elif hdr in DIALOGS:
+            with LOCK:
+                STATE["dialog"] = {"kind": DIALOGS[hdr],
+                                   "text": (lines[0] if lines else "").strip(),
+                                   "at": time.time()}
         elif hdr in (BUTTONS, FULL_BUTTONS):
+            with LOCK:
+                STATE["dialog"] = None
+                STATE["buttons_seq"] = STATE.get("buttons_seq", 0) + 1
             labels = [line.strip() for line in lines]
             # the question these buttons answer: last "?" line since the
             # previous set of buttons (none = a plain menu)
@@ -468,7 +483,9 @@ class Tracker:
         m = re.search(r"^\s*level\s*:\s*([\d.]+)", low)
         if m:
             self.p.level = float(m.group(1))
-        m = re.search(r"^\s*mana\s*:\s*([\d.]+)", low)
+        # "Mana: 729" on the stats sheet; NOT the post's padded price list
+        # line "Mana        :      1"
+        m = re.search(r"^\s*mana:\s*([\d.]+)", low)
         if m:
             self.p.mana = float(m.group(1))
         # game text saying we got poisoned (the Stats sheet gives the
@@ -522,6 +539,11 @@ class Tracker:
         if ("regained your sight" in low or "veil of darkness lifts" in low
                 or "athelas" in low or re.match(r"^\s*blind\s*:\s*no", low)):
             self.blind = False
+        # trading post price list: "Shield      :      5"
+        m = re.match(r"^\s*(Mana|Shield|Book|Amulet|Sword|Quicksilver|Blessing)\s+:\s*([\d.]+)\s*$", txt)
+        if m:
+            with LOCK:
+                STATE.setdefault("post_prices", {})[m.group(1)] = float(m.group(2))
         if "changes into the form of a mimic" in low:
             self.note("It was a Mimic all along.")
         if "smurf berries" in low:
@@ -1205,6 +1227,11 @@ class Tracker:
                 "age": self.age, "degenerated": self.degenerated,
                 "circle": self.circle(),
                 "notes": notes,
+                "x": self.xy[0] if self.xy else None,
+                "y": self.xy[1] if self.xy else None,
+                "shop": self._shop,
+                "blind": self.blind,
+                "poison_exact": self.stats_at > 0,
             }
 
     def circle(self):

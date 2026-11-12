@@ -43,10 +43,20 @@ import rules as RU
 
 POLL_URL = "http://127.0.0.1:8420/state"
 REST_TOPUP = 0.25
+SELFPLAY_HUNT_ENERGY = 0.6   # self-play hunts on if poison stops resting above this
 # Questions with a fixed answer: (text in the question, button, why)
 FIXED_ANSWERS = [
     ("pillage", "no", "pillaging adds 0.5 sin (misc.c): sin weakens a "
                       "blessing, and druids and Wayland Smith shun sinners"),
+    ("succumb to your carnal", "no", "keeping the Virgin: Unicorns surrender to it"),
+    ("sacrifice her", "no", "keeping the Virgin: Unicorns surrender to it"),
+    ("ring of power", "no", "rings of power spoil and kill (treasure.c)"),
+    ("the one ring", "no", "rings of power spoil and kill (treasure.c)"),
+    ("frisk the body", "no", "fresh corpses are cursed 75% of the time"),
+    ("destroy your ring", "yes", "keeping it adds 2.5 sin"),
+    ("go anywhere", "no", "staying put"),
+    ("still wish to move", "yes", "moving on"),
+    ("will you read it", "yes", "scrolls can be trove maps"),
 ]      # skip the last rest if less than this much of one is missing
 POLL_MS = 150     # how often to read the proxy's state (local, cheap)
 PAINT_MS = 100
@@ -129,7 +139,8 @@ MOVE_TO_BUTTON = {
 class ButtonOverlay:
     def __init__(self, parent=None, autopress=None, before_press=None,
                  on_autopress_change=None, reroll_opts=None,
-                 always_evade=None, skip_low_value=True, mana_death=None):
+                 always_evade=None, skip_low_value=True, mana_death=None,
+                 selfplay=False, selfplay_opts=None):
         """parent=None: standalone floating window.
 
         parent=<Frame>: render inside that frame (launcher.py docks it beside
@@ -180,6 +191,10 @@ class ButtonOverlay:
         self.skip_low_value = bool(skip_low_value)
         # spend mana only when fighting without it is at least this deadly
         self.mana_death = mana_death
+        # self-play: walk, shop and hunt outside fights (autopilot.py)
+        import autopilot
+        self.pilot = autopilot.Autopilot(**(selfplay_opts or {}))
+        self.selfplay = bool(selfplay)
         # resting after fights
         self._rest_last_e = None     # best energy reached while resting
         self._rest_stalls = 0        # rests in a row that didn't raise energy
@@ -440,10 +455,14 @@ class ButtonOverlay:
 
     def _send_windows_key(self, key):
         """Send a real number-key tap on Windows without external packages."""
+        return self._send_vk(ord(key))
+
+    def _send_vk(self, vk):
+        """Tap one virtual key (Windows). Keypad 1-9 move on the compass in
+        the Phantasia clients (7 NW, 8 N, 9 NE, 4 W, 6 E, 1 SW, 2 S, 3 SE)."""
         try:
             INPUT_KEYBOARD = 1
             KEYEVENTF_KEYUP = 0x0002
-            vk = ord(key)
 
             class KEYBDINPUT(ctypes.Structure):
                 _fields_ = [
@@ -492,6 +511,88 @@ class ButtonOverlay:
             return True
         except Exception:
             return False
+
+    NUMPAD = {"NW": 7, "N": 8, "NE": 9, "W": 4, "E": 6, "SW": 1, "S": 2, "SE": 3}
+
+    def _send_typed(self, parts):
+        """Type into a dialog: strings, with a Tab between parts (x, y for
+        Move To), then Enter. Runs on a thread so the panel doesn't stall."""
+        def worker():
+            time.sleep(BOLT_TYPE_DELAY_S)
+            if not self._autopress or not self._allowed():
+                return
+            if sys.platform.startswith("win"):
+                for k, part in enumerate(parts):
+                    if k:
+                        self._send_vk(0x09)              # Tab to the next field
+                        time.sleep(0.03)
+                    for ch in str(part):
+                        self._send_vk(0xBD if ch == "-" else ord(ch))
+                        time.sleep(0.02)
+                self._send_windows_enter()
+            else:
+                keys = []
+                for k, part in enumerate(parts):
+                    if k:
+                        keys.append(["xdotool", "key", "Tab"])
+                    keys.append(["xdotool", "type", str(part)])
+                keys.append(["xdotool", "key", "Return"])
+                for cmd in keys:
+                    subprocess.run(cmd, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, check=False)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _autopilot_step(self, d):
+        """Self-play outside fights (autopilot.py). True when it acted."""
+        if not (self.selfplay and self._autopress and self.pilot):
+            return False
+        act = self.pilot.decide(d)
+        if not act:
+            return False
+        seq = d.get("buttons_seq")
+        labels = d.get("buttons") or []
+        self._show_labels(labels)
+        self._reset_cells()
+        self._cfg(self.sub, text=act.get("why", ""))
+        kind = act["type"]
+        if kind == "wait":
+            self._cfg(self.hint, text="Self-play: waiting", fg=DIM)
+            return True
+        if kind in ("button", "moveto"):
+            want = "move to" if kind == "moveto" else act["label"].lower()
+            low = [str(x).strip().lower() for x in labels]
+            if want not in low:
+                return False
+            num = low.index(want) + 1
+            self._light(num, GREEN_HI, GREEN_HI)
+            self._cfg(self.hint, text=f"Self-play: {labels[num - 1]} ({num})", fg=GREEN_HI)
+            self._press_key(num, ("pilot", want, seq), repeat_s=3.0)
+            return True
+        if kind == "compass":
+            sig = ("pilot-compass", seq, act["dir"])
+            self._cfg(self.hint, text=f"Self-play: move {act['dir']}", fg=GREEN_HI)
+            if sig != self._last_press_sig and self._allowed():
+                if sys.platform.startswith("win"):
+                    ok = self._send_vk(0x60 + self.NUMPAD[act["dir"]])
+                else:
+                    ok = subprocess.run(["xdotool", "key", f"KP_{self.NUMPAD[act['dir']]}"],
+                                        check=False).returncode == 0
+                if ok:
+                    self._last_press_sig, self._last_press_at = sig, time.monotonic()
+                    p = d.get("player") or {}
+                    self.pilot.pressed(act, (p.get("x"), p.get("y")))
+            return True
+        if kind in ("type", "coords"):
+            dlg = d.get("dialog") or {}
+            sig = ("pilot-type", dlg.get("text"), dlg.get("at"))
+            parts = [act["x"], act["y"]] if kind == "coords" else [act["text"]]
+            self._cfg(self.hint, text="Self-play: typing " + ", ".join(map(str, parts)),
+                      fg=GREEN_HI)
+            if sig != self._last_press_sig and self._allowed():
+                self._last_press_sig, self._last_press_at = sig, time.monotonic()
+                self._send_typed(parts)
+            return True
+        return False
 
     def _button_texts(self):
         """Return the currently visible game button labels, normalized."""
@@ -744,6 +845,8 @@ class ButtonOverlay:
             # if it goes higher than that (cured/healed); a new fight also
             # clears the stop (see _update).
             if e <= self._rest_stopped:
+                if self.selfplay and e >= SELFPLAY_HUNT_ENERGY * mx:
+                    return False                    # good enough: self-play hunts
                 why = (f"poisoned ({poison:g})" if poison > 0
                        else "resting isn't raising it (poisoned?)")
                 self._cfg(self.hint, text=f"Energy {e:g}/{mx:g}: stopped resting",
@@ -766,6 +869,8 @@ class ButtonOverlay:
             self._cfg(self.sub, text=f"a rest would mostly be wasted ({target - e:.0f} "
                                      f"missing, a rest gives {net:.0f}); saving the turn")
             return False
+        if poison > 0 and need == 0 and self.selfplay:
+            return False                            # as rested as poison allows
         if poison > 0 and need == 0:
             self._cfg(self.hint, text=f"Energy {e:g}/{mx:g}: rested as far as poison allows",
                       fg=AMBER)
@@ -807,6 +912,13 @@ class ButtonOverlay:
                 and ("move to" in labels or "hunt" in labels)):
             f = None
 
+        # A typed-answer dialog is on screen (shop amount, Move To, medic):
+        # the buttons in the state are the previous screen's, so don't press
+        # any of them; self-play answers the dialog if it's one of its own.
+        if d.get("dialog"):
+            if self._autopilot_step(d):
+                return
+
         # HIGHEST PRIORITY: if the game is showing a "More" prompt, nothing else
         # works until you clear it. Button 1 == "More". Tell the player to press
         # it, overriding any stale combat recommendation.
@@ -835,6 +947,8 @@ class ButtonOverlay:
 
         if not f or not f.get("name") or not f.get("moves"):
             if self._rest_step(d):
+                return
+            if self._autopilot_step(d):
                 return
             if d.get("buttons"):
                 self._show_labels(d.get("buttons"))   # the game's real menu

@@ -85,6 +85,11 @@ DEFAULTS = {
     "always_evade": ["Moron"],
     # evade monsters whose experience isn't worth the age the fight costs
     "skip_low_value": True,
+    # self-play: walk to the hunting circle, shop at trading posts, hunt.
+    # Needs Auto-play on. risk = least chance to survive 20 encounters in
+    # the circle it hunts (0.95 = careful).
+    "self_play": False,
+    "self_play_risk": 0.95,
     # spend mana only when every way of fighting without it is at least
     # this likely to kill you (0.05 = 5%); lower = safer but more mana
     "mana_death": 0.05,
@@ -563,6 +568,7 @@ class Launcher:
                              self.toggle_panel)
         self.auto_btn = btn("", self.toggle_autoplay)
         self.auto_btn.configure(font=self.f_bold)
+        self.self_btn = btn("", self.toggle_selfplay)
         self.rec_btn = btn("", self.toggle_record)
         btn("Recordings", self.open_recordings)
         btn("Bestiary", self.open_bestiary)
@@ -610,8 +616,11 @@ class Launcher:
                                          "require_max": self.cfg.get("reroll_require_max", ["speed"])},
                                      always_evade=self.cfg.get("always_evade", ["Moron"]),
                                      skip_low_value=self.cfg.get("skip_low_value", True),
-                                     mana_death=self.cfg.get("mana_death", 0.05))
+                                     mana_death=self.cfg.get("mana_death", 0.05),
+                                     selfplay=self.cfg.get("self_play", False),
+                                     selfplay_opts={"risk": float(self.cfg.get("self_play_risk", 0.95))})
         self._paint_auto_btn()
+        self._paint_self_btn()
         self._paint_rec_btn()
 
     def _layout_panel(self):
@@ -639,6 +648,23 @@ class Launcher:
             self.recorder.autoplay = on
         save_config(self.cfg)
         self._paint_auto_btn()
+
+    def toggle_selfplay(self):
+        on = not self.cfg.get("self_play", False)
+        self.cfg["self_play"] = on
+        if getattr(self, "buttons", None):
+            self.buttons.selfplay = on
+            if on and not self.cfg["autoplay"]:
+                self.buttons.set_autopress(True)     # self-play needs auto-play
+        save_config(self.cfg)
+        self._paint_self_btn()
+
+    def _paint_self_btn(self):
+        on = self.cfg.get("self_play", False)
+        self.self_btn.configure(text="Self-play: ON" if on else "Self-play: OFF",
+                                fg="#0c0a07" if on else INK,
+                                bg=GREEN if on else PANEL,
+                                activebackground=GREEN if on else LINE)
 
     def _paint_auto_btn(self):
         on = self.cfg["autoplay"]
