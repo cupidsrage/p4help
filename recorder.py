@@ -129,12 +129,14 @@ def guess_button(raw_lines, buttons):
     """Which button an input was. Client lines are a type digit plus data;
     a button click is "1" + its 0-based position ("12" = 3rd button), as
     seen in real recordings. Returns {"num": 1-8, "label"} or None."""
-    for ln in reversed(raw_lines):
-        m = re.match(r"^\s*1([0-7])\s*$", ln)
-        if m:
-            i = int(m.group(1))
-            if i < len(buttons):
-                return {"num": i + 1, "label": buttons[i] or "(blank)"}
+    toks = [t.strip() for t in raw_lines if t.strip()]
+    for k, tok in enumerate(toks):
+        m = re.fullmatch(r"1([0-7])", tok)
+        i = int(m.group(1)) if m else (
+            int(toks[k + 1]) if tok == "1" and k + 1 < len(toks)
+            and re.fullmatch(r"[0-7]", toks[k + 1]) else None)
+        if i is not None and i < len(buttons):
+            return {"num": i + 1, "label": buttons[i] or "(blank)"}
     return None
 
 
@@ -217,6 +219,12 @@ class Recorder:
                 "button": guess_button(lines, screen["buttons"]),
                 "by": "autoplay" if self.autoplay else "human",
             }, shot=True)
+
+    def note(self, text):
+        """A line from the proxy itself (e.g. its own stat request)."""
+        with self.lock:
+            if self.session:
+                self._raw("!", text)
 
     # ---- writers (lock held) ----
     def _raw(self, arrow, text):

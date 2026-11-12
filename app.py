@@ -103,10 +103,10 @@ LOCK = threading.Lock()
 # gets a fresh Tracker, but the overlay's RollJudge lives on and caches by id.
 _CHAR_IDS = itertools.count(1)
 RECORDER = None   # recorder.Recorder, set by enable_recording()
-# Quietly fetch the Info -> Stats sheet (statsync.py). OFF: on the live
-# server the requests got no recognisable reply and the game locked up /
-# errored. Needs the real reply format from a recording before re-enabling.
-AUTO_STATS = False
+# Quietly fetch the Info -> Stats sheet (statsync.py). The first version sent
+# a malformed request (no NUL after the "5") and its reply filter could hold
+# data back; both fixed using a real recording of the client's own request.
+AUTO_STATS = True
 
 
 def snapshot_state():
@@ -124,6 +124,20 @@ def enable_recording(folder=None):
         RECORDER = recorder.Recorder(folder or os.path.join(HERE, "recordings"),
                                      LINECOUNT, snapshot_state)
     return RECORDER
+
+
+def click_index(text):
+    """0-based button position of a client click, or None. Client messages
+    are fields separated by NUL (or newline): a click is "1" then the
+    position, either as separate fields ("1", "2") or run together ("12")."""
+    toks = [t.strip() for t in re.split(r"[\x00\n]", text) if t.strip()]
+    for k, tok in enumerate(toks):
+        m = re.fullmatch(r"1([0-7])", tok)
+        if m:
+            return int(m.group(1))
+        if tok == "1" and k + 1 < len(toks) and re.fullmatch(r"[0-7]", toks[k + 1]):
+            return int(toks[k + 1])
+    return None
 
 
 def num(s):
@@ -314,12 +328,9 @@ class Tracker:
         menu = self.class_menu
         if not menu:
             return
-        for ln in text.replace("\x00", "\n").split("\n"):
-            m = re.match(r"^\s*1([0-7])\s*$", ln)
-            if m:
-                i = int(m.group(1))
-                if i < len(menu) and menu[i]:
-                    self.class_pick = {menu[i]}
+        i = click_index(text)
+        if i is not None and i < len(menu) and menu[i]:
+            self.class_pick = {menu[i]}
 
     def _new_roll(self):
         p = self.p
@@ -933,8 +944,12 @@ def handle(client):
     # game window by `replies` but still read by the tracker.
     send_lock = threading.Lock()
     replies = SS.ReplyFilter()
+    def note_sent(req):
+        if rec is not None:
+            rec.note("[auto stats] > " + req.decode("utf-8", "replace")
+                     .replace("\x00", "<NUL>"))
     sync = SS.StatsSync(t, server, send_lock, replies, STATE, LOCK,
-                        enabled=AUTO_STATS)
+                        enabled=AUTO_STATS, on_sent=note_sent)
     with LOCK:
         STATE["statsync_enabled"] = AUTO_STATS
     threading.Thread(target=sync.run, daemon=True).start()
