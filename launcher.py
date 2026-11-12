@@ -78,6 +78,8 @@ DEFAULTS = {
     # quietly keep Info -> Stats data (brains, magic level, poison...)
     # current without opening it in the game
     "auto_stats": True,
+    # monsters auto-play always Evades, whatever the odds (name contains)
+    "always_evade": ["Moron"],
     "record": True,               # record screens + inputs (recorder.py)
     "record_screenshots": False,  # also save a PNG of the game per input
     "geometry": "",
@@ -596,7 +598,8 @@ class Launcher:
                                      reroll_opts={
                                          "target_rolls": self.cfg.get("reroll_target", 100),
                                          "weights": self.cfg.get("reroll_weights") or {},
-                                         "require_max": self.cfg.get("reroll_require_max", ["speed"])})
+                                         "require_max": self.cfg.get("reroll_require_max", ["speed"])},
+                                     always_evade=self.cfg.get("always_evade", ["Moron"]))
         self._paint_auto_btn()
         self._paint_rec_btn()
 

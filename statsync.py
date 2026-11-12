@@ -124,11 +124,22 @@ class StatsSync:
         self.sent = 0
 
     def note_client(self, data):
-        """Called with every client -> server chunk (bytes)."""
-        self.last_client = time.time()
-        self.partial = not data.endswith(b"\n")
-        if data.endswith(b"\r\n"):
-            self.eol = b"\r\n"
+        """Called with every client -> server chunk (bytes).
+
+        Learns how the client ends a message (newline, CRLF or a NUL byte)
+        so our request looks the same, notes whether the client is mid-
+        message, and counts only real input (clicks, answers, name clicks:
+        2+ characters) as the player being busy -- one-character messages
+        are keep-alives the client sends on its own."""
+        for end in (b"\r\n", b"\x00", b"\n"):
+            if data.endswith(end):
+                self.eol = end
+                break
+        self.partial = not data.endswith((b"\n", b"\x00"))
+        for part in data.replace(b"\x00", b"\n").split(b"\n"):
+            if len(part.strip()) >= 2:
+                self.last_client = time.time()
+                break
 
     def _on_main_menu(self):
         with self.state_lock:
@@ -163,11 +174,21 @@ class StatsSync:
         self.t.stats_due = False
         self.last_sync = now
         self.sent += 1
+        with self.state_lock:
+            self.state["statsync"] = {"sent": self.sent,
+                                      "replies": self.filter.dropped,
+                                      "eol": self.eol.decode("latin-1"),
+                                      "last": time.strftime("%H:%M:%S")}
 
     def run(self):
         while self.alive:
             try:
                 self.tick()
+                if self.sent:
+                    with self.state_lock:
+                        st = self.state.get("statsync") or {}
+                        st["replies"] = self.filter.dropped
+                        self.state["statsync"] = st
             except Exception:
                 pass
             time.sleep(0.5)

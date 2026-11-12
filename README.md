@@ -27,6 +27,9 @@ panel docked on the right. Close the window and everything shuts down.
   game for you: combat moves, the Spell → Magic Bolt → mana steps, and "More"
   prompts. It only types while the launcher window is in front, so alt-tabbing
   away pauses it. It's off by default and remembers your choice.
+- **Always evade:** auto-play presses **Evade** every round against monsters on
+  the `"always_evade"` list in `launcher.json` (default `["Moron"]`), whatever
+  the odds. Add names to flee from other monsters too.
 - **Treasure & gold:** with Auto-play on, "Do you want to inspect it?" / "pick
   them up?" questions get **Yes** when you're not poisoned and **No** when you
   are. After a fight it first fetches a fresh stat sheet (quietly) to see whether

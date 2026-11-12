@@ -62,6 +62,9 @@ REST_STALLS = 3
 # Treasure: wait this long for a fresh stat sheet (is the last fight's poison
 # known?) before answering on the last known poison value.
 TREASURE_WAIT_S = 8.0
+# Monsters to Evade every round no matter what the advisor's odds say.
+# Matched case-insensitively against the monster's name ("A Moron").
+ALWAYS_EVADE = ["Moron"]
 
 BG    = "#16130e"
 PANEL = "#211c14"
@@ -103,7 +106,8 @@ MOVE_TO_BUTTON = {
 
 class ButtonOverlay:
     def __init__(self, parent=None, autopress=None, before_press=None,
-                 on_autopress_change=None, reroll_opts=None):
+                 on_autopress_change=None, reroll_opts=None,
+                 always_evade=None):
         """parent=None: standalone floating window.
 
         parent=<Frame>: render inside that frame (launcher.py docks it beside
@@ -143,8 +147,12 @@ class ButtonOverlay:
         self._flash = 0
         # character creation: Reroll until the stats are top-tier for the class
         self.judge = reroll.RollJudge(**(reroll_opts or {}))
+        # monsters to always flee, whatever the odds (matched by name)
+        self.always_evade = [str(n).strip().lower() for n in
+                             (ALWAYS_EVADE if always_evade is None else always_evade)
+                             if str(n).strip()]
         # resting after fights
-        self._rest_last_e = None     # energy when Rest was last pressed
+        self._rest_last_e = None     # best energy reached while resting
         self._rest_stalls = 0        # rests in a row that didn't raise energy
         self._rest_stopped = None    # energy we gave up at (stays until it moves)
         self._treasure_seen = None   # (prompt, labels) and when it appeared
@@ -464,6 +472,11 @@ class ButtonOverlay:
         btns = self._button_texts()
         return bool(btns and btns[0] == "more")
 
+    def _forced_evade(self, name):
+        """The always-evade entry this monster matches, or None."""
+        low = (name or "").lower()
+        return next((n for n in self.always_evade if n in low), None)
+
     @staticmethod
     def _round(f):
         """The fight's round number. Part of every fight key's signature, so
@@ -534,7 +547,9 @@ class ButtonOverlay:
             self.sub.configure(text="reading your stats after that fight")
             return True
         if poison is None:
-            want, why = "no", "poison unknown: playing it safe"
+            ss = d.get("statsync") or {}
+            want, why = "no", ("poison unknown: playing it safe (stat fetches "
+                               f"sent {ss.get('sent', 0)}, read {ss.get('replies', 0)})")
         elif poison > 0:
             want, why = "no", f"poisoned ({poison:g})"
         else:
@@ -567,16 +582,17 @@ class ButtonOverlay:
         self._reset_cells()
 
         if self._rest_stopped is not None:
-            # Stay stopped while energy holds or keeps dropping (poison
-            # drain). Resume only if it went UP (cured/healed); a new fight
-            # also clears the stop (see _update).
+            # Stay stopped while energy is at or below the best resting
+            # reached (holding, wobbling or draining from poison). Resume only
+            # if it goes higher than that (cured/healed); a new fight also
+            # clears the stop (see _update).
             if e <= self._rest_stopped:
-                self._rest_stopped = min(self._rest_stopped, e)
                 why = (f"poisoned ({poison:g})" if poison > 0
                        else "resting isn't raising it (poisoned?)")
                 self.hint.configure(text=f"Energy {e:g}/{mx:g}: stopped resting",
                                     fg=AMBER)
-                self.sub.configure(text=f"{why}; resumes when energy goes up")
+                self.sub.configure(text=f"{why}; best was {self._rest_stopped:g}, "
+                                        "resumes if energy goes above it")
                 return True
             self._rest_stopped = None           # energy went up: try again
             self._rest_last_e, self._rest_stalls = None, 0
@@ -584,13 +600,16 @@ class ButtonOverlay:
         col = GREEN if self._flash else GREEN_HI
         self._light(num, col, GREEN_HI)
         if self._press_key(num, ("rest", e), repeat_s=REST_REPEAT_S):
+            # Progress = a NEW HIGH. Poison can make energy wobble (up one
+            # rest, down the next); small rises that never beat the best so
+            # far don't count, so it can't rest forever.
             if self._rest_last_e is not None and e <= self._rest_last_e:
                 self._rest_stalls += 1
             else:
                 self._rest_stalls = 0
-            self._rest_last_e = e
+            self._rest_last_e = e if self._rest_last_e is None else max(self._rest_last_e, e)
             if self._rest_stalls >= (1 if poison > 0 else REST_STALLS):
-                self._rest_stopped = e
+                self._rest_stopped = self._rest_last_e
         self.hint.configure(text=f"Rest \u2192 button {num}", fg=GREEN_HI)
         self.sub.configure(text=f"energy {e:g}/{mx:g}"
                                 + (f" \u00b7 poisoned {poison:g}" if poison > 0 else ""))
@@ -637,6 +656,11 @@ class ButtonOverlay:
         self._rest_last_e, self._rest_stalls, self._rest_stopped = None, 0, None
 
         mv = f["moves"][0]
+        forced = self._forced_evade(f.get("name"))
+        if forced:
+            ev = next((m for m in f["moves"] if m.get("move") == "evade"), {})
+            mv = {"move": "evade", "arg": None, "win": ev.get("win", 0),
+                  "flee": ev.get("flee", 0), "forced": forced}
         move = mv["move"]
         info = MOVE_TO_BUTTON.get(move)
 
@@ -718,6 +742,8 @@ class ButtonOverlay:
             odds = f"{mv['win']*100:.0f}% win"
             if mv.get("flee", 0) > 0:
                 odds = f"{mv['flee']*100:.0f}% escape"
+            if mv.get("forced"):
+                odds = f"always evade \"{mv['forced']}\" \u00b7 " + odds
             self.sub.configure(text=odds)
 
     def run(self):
