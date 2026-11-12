@@ -106,6 +106,7 @@ MOVE_TO_BUTTON = {
     "aon":      ("Spell", 4, ("All or Nothing", 1)),
     "might":    ("Spell", 4, ("Increase Might", None)),
     "paralyze": ("Spell", 4, ("Paralyze", None)),
+    "haste":    ("Spell", 4, ("Haste", 4)),
     "forcefield": ("Spell", 4, ("Force Field", 5)),
 }
 

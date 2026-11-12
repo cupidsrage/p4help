@@ -45,7 +45,7 @@ NAMES = {
     "melee": "Melee", "skirmish": "Skirmish", "luckout": "Luckout",
     "evade": "Evade / Flee", "bolt": "Magic Bolt", "aon": "All or Nothing",
     "might": "Increase Might", "paralyze": "Paralyze", "nick": "Nick",
-    "ring": "Use Ring",
+    "ring": "Use Ring", "haste": "Haste", "forcefield": "Force Field",
 }
 
 

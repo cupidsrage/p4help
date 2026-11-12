@@ -90,7 +90,9 @@ def monster(name, size, cal):
 
 
 def fight(p, m):
-    res = score_moves(p, m, FightState.opening(p, m), trials=TRIALS)
+    st = FightState.opening(p, m)
+    st.pre_roll = True               # it may hit before your first move
+    res = score_moves(p, m, st, trials=TRIALS)
     if not res:
         return None
     best = res[0]

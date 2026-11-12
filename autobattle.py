@@ -31,7 +31,7 @@ from collections import defaultdict
 
 from combat import Player, Monster
 from planner import (FightState, score_moves, apply_move, try_evade,
-                     _monster_swing, might_of)
+                     _monster_turns, might_of)
 import monsters as MDB
 import zones as ZN
 
@@ -49,9 +49,10 @@ def play_one_fight(player, mon, decide_trials=300, max_rounds=150):
     Returns an outcome dict.
     """
     st = FightState.opening(player, mon)
+    _monster_turns(player, mon, st, after_action=False)   # its opening hits
     moves_taken = []
 
-    while st.rounds < max_rounds:
+    while st.rounds < max_rounds and st.p_energy > 0:
         ranked = score_moves(player, mon, st, trials=decide_trials)
         if not ranked:
             break
@@ -66,7 +67,7 @@ def play_one_fight(player, mon, decide_trials=300, max_rounds=150):
                         "energy_lost": player.energy - st.p_energy,
                         "mana_spent": player.mana - st.p_mana,
                         "moves": moves_taken}
-            _monster_swing(st, mon)
+            _monster_turns(player, mon, st)
         else:
             dead = apply_move(player, mon, st, mv, arg)
             if dead:
@@ -74,7 +75,7 @@ def play_one_fight(player, mon, decide_trials=300, max_rounds=150):
                         "energy_lost": player.energy - st.p_energy,
                         "mana_spent": player.mana - st.p_mana,
                         "moves": moves_taken}
-            _monster_swing(st, mon)
+            _monster_turns(player, mon, st)
 
         if st.p_energy <= 0:
             return {"result": "death", "rounds": st.rounds,
@@ -82,6 +83,10 @@ def play_one_fight(player, mon, decide_trials=300, max_rounds=150):
                     "mana_spent": player.mana - st.p_mana,
                     "moves": moves_taken}
 
+    if st.p_energy <= 0:
+        return {"result": "death", "rounds": st.rounds,
+                "energy_lost": player.energy,
+                "mana_spent": player.mana - st.p_mana, "moves": moves_taken}
     return {"result": "timeout", "rounds": st.rounds,
             "energy_lost": player.energy - max(0, st.p_energy),
             "mana_spent": player.mana - st.p_mana, "moves": moves_taken}

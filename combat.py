@@ -65,7 +65,9 @@ class Player:
     ring: bool = False
 
     def might(self, strength_spell=0.0, ring_in_use=False):
-        m = self.strength * (1 + math.sqrt(max(0.0, self.sword)) * SWORDPOWER) + strength_spell
+        # The client's Strength already includes the sword bonus
+        # (stats.c sends strength * (1 + sqrt(sword) * .04)).
+        m = self.strength + strength_spell
         if ring_in_use:
             m *= 2
         return m
@@ -364,8 +366,6 @@ def bolt_mana_for_kill(player, monster, confidence=1.0):
         return None
 
     scale = player.magiclvl ** 0.40 + 1.0
-    if "Mr" in monster.specials:      # magic resistant: halve it
-        scale *= 0.5
 
     mult = 0.7 + 0.6 * (1.0 - max(0.0, min(1.0, confidence)))
     need = math.ceil(hp / (mult * scale))

@@ -311,6 +311,8 @@ class Tracker:
             # Some endings print nothing we recognise (a Kobold stealing gold
             # and running off), which left a stale fight that froze auto-play.
             low = {b.lower() for b in labels}
+            if self.fs is not None and "melee" in low and self._wake():
+                self._advice_dirty = True   # paralysis wore off a little
             if (self.cur is not None and "melee" not in low and "rest" in low
                     and ("move to" in low or "hunt" in low)):
                 self.end_fight()
@@ -603,10 +605,26 @@ class Tracker:
             m = re.search(r"you hit .*? for ([\d.]+) damage", low)
             if m:
                 dmg = float(m.group(1))
-                self.fs.m_shield -= dmg
-                if self.fs.m_shield < 0:
-                    self.fs.m_energy += self.fs.m_shield
-                    self.fs.m_shield = 0.0
+                fs = self.fs
+                fs.m_shield -= dmg
+                if fs.m_shield < 0:
+                    fs.m_energy += fs.m_shield
+                    fs.m_shield = 0.0
+                # what the hit does besides damage (fight.c Do_playerhits)
+                how = (getattr(self, "last_click", "") or "").strip().lower()
+                max_e = max(1.0, fs.m_max_energy)
+                if how == "melee":
+                    fs.melee_dmg += dmg
+                    fs.m_strength = (fs.m_max_strength - (fs.melee_dmg / max_e)
+                                     * (fs.m_max_strength / 3.0))
+                elif how == "skirmish":
+                    fs.skirm_dmg += dmg
+                    fs.m_speed = (fs.m_max_speed - (fs.skirm_dmg / max_e)
+                                  * (fs.m_max_speed / 3.0))
+                elif how == "nick":
+                    fs.m_max_speed += 2.0
+                    fs.m_speed = 0.0 if fs.m_speed < 0 else fs.m_speed + 2.0
+                    fs.m_experience -= fs.m_experience // 10
                 changed = True
 
             # "A Kobold hit you for 10 damage!"
@@ -614,9 +632,12 @@ class Tracker:
                 self.cal_fight["out"].append(dmg)
             if "hit you for" in low:
                 changed = True
+                self._wake()           # each pass of the server loop
                 mh = re.search(r"hit you for ([\d.]+) damage", low)
-                if mh and getattr(self, "cal_fight", None):
-                    self.cal_fight["in"].append(float(mh.group(1)))
+                cf = getattr(self, "cal_fight", None)
+                if mh and cf:
+                    # with the damage you'd dealt by then (melee wears it down)
+                    cf["in"].append((float(mh.group(1)), sum(cf["out"])))
 
             # luckout resolved
             if "you blew it" in low and getattr(self, "cal_fight", None):
@@ -636,13 +657,18 @@ class Tracker:
             if aon_zero or ("you blew it" not in low and (
                     "grows stronger" in low or "gets stronger" in low)):
                 self.aon_pending = False
-                self.fs.m_strength *= 2.0
-                self.fs.m_speed *= 2.0
-                self.fs.aon_spent = True
+                fs = self.fs
+                fs.m_max_strength *= 2.0
+                fs.m_strength = fs.m_max_strength
+                fs.m_max_speed *= 2.0
+                fs.m_speed = fs.m_speed * 2.0 if fs.m_speed * 2.0 > 1 else fs.m_speed + 1
+                fs.aon_spent = True
                 self.note("AoN FAILED — it doubled str + speed")
                 changed = True
 
-            if "paralyzed" in low or "cannot move" in low:
+            # Paralyze worked ("A Troll is held."): its speed is set to -2
+            # and climbs back by 1 every pass of the fight loop.
+            if low.rstrip().endswith(" is held."):
                 self.fs.m_paralyzed = True
                 self.fs.m_speed = -2.0
                 changed = True
@@ -691,6 +717,17 @@ class Tracker:
         if ("you killed it" in low or "you have been killed" in low
                 or "it wandered off" in low or "you got away" in low):
             self.end_fight()
+
+    def _wake(self):
+        """Start of a pass of the server's fight loop: a paralyzed monster's
+        speed climbs back by 1 (fight.c)."""
+        fs = self.fs
+        if fs is None:
+            return False
+        old = fs.m_speed
+        fs.m_speed = min(fs.m_speed + 1.0, fs.m_max_speed)
+        fs.m_paralyzed = fs.m_speed <= 0
+        return fs.m_speed != old
 
     # ---------- fight lifecycle ----------
     def encounter(self, name, size, flock):

@@ -2,8 +2,9 @@
 """
 Learn the real monster numbers from your own fights.
 
-The advisor's monster energy/strength come from the old 4.03 tables scaled
-by size. Phantasia 5 may scale big monsters differently; if it overestimates
+The advisor's monster energy/strength come from the monster table scaled
+by size the way the Phantasia 4 server does it (fight.c). Phantasia 5 may
+differ; if it overestimates
 a size-6 monster's energy, melee looks hopeless and it reaches for Magic
 Bolt when melee would have won.
 
@@ -72,7 +73,8 @@ class Calibration:
     def record(self, size, pred_energy, pred_strength, dmg_out, dmg_in,
                save=True):
         """One finished fight. dmg_out: your hits on it, in order; dmg_in:
-        its hits on you. Only call for fights won purely by those hits (no
+        its hits on you, each a number or (damage, your total damage dealt
+        before it). Only call for fights won purely by those hits (no
         luckout or spell finished it -- see fight_counts)."""
         if not dmg_out or pred_energy <= 0:
             return
@@ -88,9 +90,17 @@ class Calibration:
             s["energy"] = er if s["n"] == 0 else self._avg(s["energy"], s["n"], er)
             s["n"] += 1
             if len(dmg_in) >= 3 and pred_strength > 0:
-                mean = sum(dmg_in) / len(dmg_in)
-                # a hit is 1 + r * strength, r uniform: mean = 1 + strength/2
-                sr = min(max((mean - 1.0) / (pred_strength / 2.0), CLAMP[0]), CLAMP[1])
+                # A hit is 1 + r * strength, r uniform: mean 1 + strength/2.
+                # Melee wears its strength down by up to a third as its
+                # energy runs out (fight.c), so compare each hit with the
+                # strength it had at that moment.
+                got = want = 0.0
+                for h in dmg_in:
+                    dmg, before = h if isinstance(h, (tuple, list)) else (h, 0.0)
+                    wear = min(before, actual) / (3.0 * actual)
+                    got += dmg - 1.0
+                    want += pred_strength * (1.0 - wear) / 2.0
+                sr = min(max(got / want, CLAMP[0]), CLAMP[1])
                 s["strength"] = sr if s["ns"] == 0 else self._avg(s["strength"], s["ns"], sr)
                 s["ns"] += 1
         if save:
@@ -167,7 +177,7 @@ class Calibration:
                         continue
                     m = HIT_YOU.search(text)
                     if m:
-                        cur["in"].append(float(m.group(1)))
+                        cur["in"].append((float(m.group(1)), sum(cur["out"])))
                         continue
                     low = text.lower()
                     if "you blew it" in low:
