@@ -36,6 +36,7 @@ LINE    = "#4a3f2a"
 INK     = "#e8dcc0"
 DIM     = "#9a8d72"
 GOLD    = "#d4b03a"
+STALL_S = 15           # remind you to answer a fight prompt after this long
 GREEN   = "#6bb050"
 AMBER   = "#e0982e"
 RED     = "#cc5038"
@@ -190,7 +191,14 @@ class Overlay:
             round(p.get("energy", 0)), round(p.get("mana", 0)),
             p.get("brains"), p.get("magiclvl"),
             tuple(p.get("notes") or ()),
+            self._stalled(f),
         )
+
+    @staticmethod
+    def _stalled(f):
+        """Your fight prompt has been waiting a while (no auto-play)."""
+        at = f.get("prompt_at") if f else None
+        return bool(at) and time.time() - at > STALL_S
 
     def _render(self):
         if not self.alive:
@@ -323,6 +331,11 @@ class Overlay:
             self._row(self.body, "\u2605 " + f["quest_target"],
                       fg=GOLD, font=self.f_sm)
 
+        if self._stalled(f):
+            self._row(self.body, "! Answer the fight: if it times out the monster "
+                      "gets a 25% free hit and you tire faster.", fg=RED,
+                      font=self.f_sm)
+
         # --- warnings ---
         for wmsg in (f.get("warnings") or [])[:2]:
             self._row(self.body, "! " + wmsg, fg=AMBER, font=self.f_tiny)
@@ -447,7 +460,7 @@ class Overlay:
                      font=self.f_md).pack()
             tk.Label(c, text=k, bg=BG, fg=DIM, font=self.f_tiny).pack()
         # reminders from the game's rules (gold weight, trove maps, ...)
-        for note in (p.get("notes") or [])[:3]:
+        for note in (p.get("notes") or [])[:5]:
             self._row(self.body, "! " + note, fg=AMBER, font=self.f_tiny)
 
     def run(self):

@@ -155,11 +155,22 @@ def _monster_turns(player, mon, st, after_action=True):
     if after_action:
         st.ticks += 1                       # the pass you just acted in
     no_init = bool(set(mon.specials) & NO_INITIATIVE)
+    # A blessing gives you the first hit. With any sin the monster can take
+    # it back by winning several initiative rolls in a row (fight.c).
+    firsthit = not after_action and getattr(player, "blessing", False)
+    sin = getattr(player, "sin", 0.0) or 0.0
     for _ in range(400):
         if st.p_energy <= 0:
             return
         _wake(st)
         q = quickness_of(player, st)
+        if firsthit and sin > 0:
+            k = 6 - math.floor((sin + 1.0) / 1.25)
+            if (all(random.random() * st.m_speed > random.random() * q
+                    for _ in range(max(0, k))) and q > 0):
+                firsthit = False
+        if firsthit:
+            return                          # blessed: you go first
         if q <= 0 and st.m_speed > 0 and not no_init:
             st.p_energy = 0.0               # speed 0: it never stops hitting
             return
@@ -172,6 +183,10 @@ def _monster_turns(player, mon, st, after_action=True):
 
 def legal_moves(player, mon, st):
     """Every button you could actually press this round."""
+    if "Sh" in mon.specials:
+        # Shrieker: never attack it. A hit that doesn't kill it calls a
+        # monster #70-99 (Balrog, Titan, Dragon...), and running never fails.
+        return ["evade"]
     out = ["melee", "skirmish", "evade"]
     immune = bool(set(mon.specials) & SPELL_IMMUNE)
 
@@ -304,6 +319,12 @@ def apply_move(player, mon, st, move, bolt_mana=None):
     elif move == "evade":
         pass   # handled by caller
 
+    # Shrieker: any hit that doesn't kill it makes it shriek and call
+    # monster #70-99 (Balrog, Titan, Dragon...) in its place (fight.c
+    # Do_hitmonster -> Do_monsthits). Count that as losing the fight.
+    if ("Sh" in mon.specials and move in ("melee", "skirmish", "nick", "bolt")
+            and 0 < st.m_energy):
+        st.p_energy = 0.0
     return st.m_energy <= 0
 
 
@@ -789,6 +810,9 @@ def explain(player, mon, st, moves):
     if mv == "forcefield":
         return (f"Force Field soaks {20 * player.magiclvl:.0f} damage before "
                 "your energy takes any.")
+    if mv == "evade" and "Sh" in mon.specials:
+        return ("Shrieker: RUN. Hitting it without killing it calls a Balrog, "
+                "Titan or Dragon; running from a Shrieker always works.")
     if mv == "evade":
         return (f"You lose this fight. Get out — {top['flee']*100:.0f}% to escape.")
     if mv == "melee":

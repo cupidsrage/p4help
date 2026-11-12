@@ -42,6 +42,7 @@ from statsync import is_treasure
 import rules as RU
 
 POLL_URL = "http://127.0.0.1:8420/state"
+REST_TOPUP = 0.25      # skip the last rest if less than this much of one is missing
 POLL_MS = 150     # how often to read the proxy's state (local, cheap)
 PAINT_MS = 100
 AUTO_PRESS = (
@@ -66,6 +67,10 @@ TREASURE_WAIT_S = 8.0
 # Monsters to Evade every round no matter what the advisor's odds say.
 # Matched case-insensitively against the monster's name ("A Moron").
 ALWAYS_EVADE = ["Moron"]
+# Always fled no matter what the settings say: hitting a Shrieker without
+# killing it (or resting) makes it call monster #70-99 -- Balrogs, Titans,
+# Dragons (fight.c) -- and evading a Shrieker never fails.
+MUST_EVADE = ["Shrieker"]
 # Survival rules on top of the advisor's pick (auto-play only):
 SAFE_MAX_DEATH = 0.02     # advisor's move kills you more often than this -> safest move
 GROUP_RESERVE = 0.50      # in a group, don't let a fight leave you below this of max energy
@@ -160,6 +165,8 @@ class ButtonOverlay:
         self.always_evade = [str(n).strip().lower() for n in
                              (ALWAYS_EVADE if always_evade is None else always_evade)
                              if str(n).strip()]
+        self.always_evade += [n.lower() for n in MUST_EVADE
+                              if n.lower() not in self.always_evade]
         # resting after fights
         self._rest_last_e = None     # best energy reached while resting
         self._rest_stalls = 0        # rests in a row that didn't raise energy
@@ -681,6 +688,14 @@ class ButtonOverlay:
         # and poison takes a fixed amount back.
         target, net, need = RU.rest_target(
             e, mx, p.get("shield") or 0, p.get("level") or 0, poison, p.get("cls"))
+        # Every rest is a turn, and every 750 turns cost stats for good: don't
+        # spend one topping up a sliver (less than REST_TOPUP of a rest).
+        if need and net > 0 and target - e < REST_TOPUP * net:
+            self._cfg(self.hint, text=f"Energy {e:g}/{mx:g}: close enough to full",
+                      fg=GREEN_HI)
+            self._cfg(self.sub, text=f"a rest would mostly be wasted ({target - e:.0f} "
+                                     f"missing, a rest gives {net:.0f}); saving the turn")
+            return False
         if poison > 0 and need == 0:
             self._cfg(self.hint, text=f"Energy {e:g}/{mx:g}: rested as far as poison allows",
                       fg=AMBER)

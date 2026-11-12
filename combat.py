@@ -63,6 +63,8 @@ class Player:
     shield: float = 0
     level: float = 0
     ring: bool = False
+    blessing: bool = False   # first hit in fights (fight.c firsthit)
+    sin: float = 0.0
 
     def might(self, strength_spell=0.0, ring_in_use=False):
         # The client's Strength already includes the sword bonus

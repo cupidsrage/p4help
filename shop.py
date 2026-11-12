@@ -262,3 +262,71 @@ def _measure_purchases(player, cls_name, x, gold, circle=None, sessions=20):
         r["delta"] = r["survive"] - base_sv
     out.sort(key=lambda r: -r["delta"])
     return out
+
+
+# ---------------------------------------------------------------------------
+# Best buy for survival. Shields, swords and quicksilver REPLACE what you
+# have (commands.c: "not cumulative"; you must buy at least your current
+# amount): buying shield 1000 sets your shield to 1000 for 5000 gold.
+# Quicksilver adds sqrt(quicksilver) to speed (stats.c Do_speed), and speed
+# decides how often a monster gets to hit you.
+# ---------------------------------------------------------------------------
+def best_buys(player, cls_name, gold, circle, quicksilver=0.0, x=None):
+    """Rank what `gold` can buy by how much safer it makes fights in
+    `circle` (zones.evaluate_circle with the upgraded stats). Returns a list
+    of {"item", "to", "spend", "effect", "risk_cut", "where"} best first."""
+    import copy
+    import zones as ZN
+    from progress import CLASSES
+
+    def risk(p):
+        r = ZN.evaluate_circle(p, circle)
+        return 1.0 - r["p_survive_session"] if r else 1.0
+
+    base = risk(player)
+    c = CLASSES.get((cls_name or "").title().replace("Magic-user", "Magic-User"))
+    here = set(available(x)) if x is not None else None
+    out = []
+
+    def add(item, to, spend, effect, p):
+        cut = base - risk(p)
+        need = x_needed_for(item)
+        where = ("here" if here is not None and item in here
+                 else f"post at |x| >= {need}" if need else "")
+        out.append({"item": item, "to": to, "spend": spend, "effect": effect,
+                    "risk_cut": cut, "where": where})
+
+    # quicksilver: the most it can afford, if more than you have
+    q = math.floor(gold / 2000.0)
+    if q > quicksilver:
+        p = copy.copy(player)
+        gain = math.sqrt(q) - math.sqrt(math.floor(quicksilver))
+        p.quickness += gain
+        add("Quicksilver", q, q * 2000, f"speed +{gain:.1f}", p)
+    # shield
+    s = math.floor(gold / 5.0)
+    if s > player.shield:
+        p = copy.copy(player)
+        p.max_energy += s - player.shield
+        p.energy += s - player.shield
+        p.shield = s
+        add("Shield", s, s * 5, f"energy +{s - player.shield:.0f}", p)
+    # sword (Strength shown already includes the sword bonus)
+    w = math.floor(gold / 500.0)
+    if w > player.sword:
+        p = copy.copy(player)
+        old = 1 + math.sqrt(max(0.0, player.sword)) * 0.04
+        new = 1 + math.sqrt(w) * 0.04
+        p.strength = player.strength / old * new
+        p.sword = w
+        add("Sword", w, w * 500, f"strength +{p.strength - player.strength:.0f}", p)
+    # books
+    if c and gold >= 100:
+        n = int(gold // 100)
+        nb = book_gain(player.brains, player.level, c["max_brains"], c["brains"][2], n)
+        if nb > player.brains:
+            p = copy.copy(player)
+            p.brains = nb
+            add("Book", n, n * 100, f"brains +{nb - player.brains:.0f}", p)
+    out.sort(key=lambda r: -r["risk_cut"])
+    return out

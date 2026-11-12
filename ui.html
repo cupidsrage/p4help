@@ -203,7 +203,7 @@
           <table id="zonetbl">
             <thead><tr>
               <th>Circle</th><th>Zone</th><th>Size</th>
-              <th>Lethal</th><th>Survive 20</th><th>Exp/fight</th><th></th>
+              <th>Lethal</th><th>Survive 20</th><th>Exp/turn</th><th></th>
             </tr></thead>
             <tbody></tbody>
           </table>
@@ -395,31 +395,33 @@ function drawHunt(){
   if(cur && b && cur.circle === b.circle){
     h = `<div class="verdict v-go">
       <div class="v-t">Stay here — circle ${cur.circle}</div>
-      <div class="v-s">${esc(cur.zone)} · ~${cur.exp_per_fight.toFixed(0)} exp/fight ·
-        <b>${surv(cur).toFixed(0)}% chance to survive 20 fights</b></div></div>`;
+      <div class="v-s">${esc(cur.zone)} · ~${(cur.exp_per_turn||0).toFixed(0)} exp/turn ·
+        <b>${surv(cur).toFixed(0)}% chance to survive 20 encounters</b></div></div>`;
   } else if(b){
     const out = cur && b.circle > cur.circle;
     h = `<div class="verdict ${out?'v-mid':'v-no'}">
       <div class="v-t">Move ${out?'out':'back in'} — to circle ${b.circle}</div>
       <div class="v-s">
         ${esc(b.zone)} · ~${b.distance.toFixed(0)} from origin<br>
-        ~${b.exp_per_fight.toFixed(0)} exp/fight ·
-        <b>${surv(b).toFixed(0)}% chance to survive 20 fights</b>
-        ${cur ? `<br><span class="muted">(circle ${cur.circle}: ~${cur.exp_per_fight.toFixed(0)} exp,
+        ~${(b.exp_per_turn||0).toFixed(0)} exp/turn ·
+        <b>${surv(b).toFixed(0)}% chance to survive 20 encounters</b>
+        ${cur ? `<br><span class="muted">(circle ${cur.circle}: ~${(cur.exp_per_turn||0).toFixed(0)} exp/turn,
           ${surv(cur).toFixed(0)}% survival)</span>` : ''}
       </div></div>`;
   }
   if(cur && surv(cur) < 60)
     h = `<div class="verdict v-no"><div class="v-t">GET OUT — circle ${cur.circle} is killing you</div>
-      <div class="v-s">Only a <b>${surv(cur).toFixed(0)}%</b> chance you survive 20 fights here.
+      <div class="v-s">Only a <b>${surv(cur).toFixed(0)}%</b> chance you survive 20 encounters here.
       Move back toward the origin.</div></div>` + h;
   if(b && b.deadly && b.deadly.length)
     h += `<div class="warn">Still avoid there: ${b.deadly.map(esc).join(', ')}</div>`;
   h += `<div class="muted" style="font-size:12px;margin-top:8px">
-    <b>"Survive 20"</b> is your chance of getting through a 20-fight session alive.
-    Death is absorbing — one bad monster ends the run — so a zone that's "only"
-    13% lethal per fight leaves you a <b>6%</b> chance of surviving a session.
-    Exp/fight is <i>expected</i> exp: you don't bank experience from a fight you die in.</div>`;
+    <b>"Survive 20"</b> is your chance of getting through 20 encounters alive,
+    simulated with the advisor's fight engine against every monster that spawns
+    there (friends that join after a kill included). "Lethal" is the share of
+    spawns that kill you more than 5% of the time.
+    Exp/turn is <i>expected</i> exp per turn, counting the rests to heal: every
+    turn ages you, and every 750 turns costs stats permanently.</div>`;
   $('huntbest').innerHTML = h;
 
   const tb = document.querySelector('#zonetbl tbody');
@@ -437,7 +439,7 @@ function drawHunt(){
       <td class="d">${r.size}</td>
       <td class="${sc}">${(r.lethal_frac*100).toFixed(0)}%</td>
       <td class="${sc}"><b>${sv.toFixed(0)}%</b></td>
-      <td class="d">${r.exp_per_fight.toFixed(0)}</td>
+      <td class="d">${(r.exp_per_turn||0).toFixed(0)}</td>
       <td>${tag}</td>
     </tr>`;
   }).join('');

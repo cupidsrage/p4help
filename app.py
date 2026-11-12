@@ -23,6 +23,7 @@ distributing or advertising it is not.
 """
 
 import itertools
+import math
 import socket
 import time
 import threading
@@ -163,6 +164,14 @@ class Tracker:
         self.charms = None
         self.cloaked = False
         self.cls = ""              # class, from "Name the Fighter"
+        self.age = None            # stats sheet: Age / Degenerated
+        self.degenerated = None
+        self.next_level_at = None
+        self._notes_key = None
+        self._notes = []
+        self._shop_key = None
+        self._shop = None
+        self.quicksilver = 0.0
         self.location = ""
         self.pending = None
         self.awaiting_count = False
@@ -282,6 +291,12 @@ class Tracker:
             self.amulets = v
         elif hdr == CHARMS:
             self.charms = v
+        elif hdr == QUICKSILVER:
+            self.quicksilver = v
+        elif hdr == BLESSING:
+            p.blessing = (lines[0].strip().lower() == "yes") if lines else False
+        elif hdr == EXP:
+            self.experience = v
         elif hdr == CLOAK:
             self.cloaked = (lines[0].strip().lower() == "yes") if lines else False
         elif hdr == NAME:
@@ -326,6 +341,10 @@ class Tracker:
             # Some endings print nothing we recognise (a Kobold stealing gold
             # and running off), which left a stale fight that froze auto-play.
             low = {b.lower() for b in labels}
+            if self.cur is not None:
+                # when your fight prompt appeared: a timeout gives the
+                # monster a 25% free hit and doubles timeout fatigue
+                self.cur["prompt_at"] = time.time() if "melee" in low else None
             if self.fs is not None and "melee" in low and self._wake():
                 self._advice_dirty = True   # paralysis wore off a little
             if (self.cur is not None and "melee" not in low and "rest" in low
@@ -453,6 +472,24 @@ class Tracker:
         m = re.search(r"^\s*(gems|amulets|charms)\s*:\s*([\d.]+)", low)
         if m:
             setattr(self, m.group(1), float(m.group(2)))
+        m = re.search(r"quickness\s*:\s*[\d.]+\s*\(\s*[\d.]+\s*\+\s*([\d.]+)\s*quicksilver", low)
+        if m:
+            self.quicksilver = float(m.group(1))
+        m = re.search(r"^\s*(age|degenerated)\s*:\s*([\d.]+)", low)
+        if m:
+            setattr(self, m.group(1), float(m.group(2)))
+        m = re.search(r"^\s*next level at\s*:\s*([\d.]+)", low)
+        if m:
+            self.next_level_at = float(m.group(1))
+        m = re.search(r"^\s*sin\s*:\s*([\d.]+)", low)
+        if m:
+            self.p.sin = float(m.group(1))
+        m = re.search(r"^\s*blessing\s*:\s*(yes|no)", low)
+        if m:
+            self.p.blessing = m.group(1) == "yes"
+        if "smurf berries" in low:
+            self.note("Smurf berries: " + ("poison eased" if "better" in low or "cured" in low
+                                           else "combat fatigue halved and some energy back"))
         m = re.search(r"^\s*cloaked\s*:\s*(yes|no)", low)
         if m:
             self.cloaked = m.group(1) == "yes"
@@ -970,6 +1007,7 @@ class Tracker:
 
     def push(self):
         p = self.p
+        notes = self.notes()          # takes LOCK itself: before ours
         with LOCK:
             STATE["player"] = {
                 "name": self.name, "energy": p.energy, "max_energy": p.max_energy,
@@ -982,24 +1020,86 @@ class Tracker:
                 "stats_fresh": self.stats_at > 0 and self.stats_at >= self.fight_end_at,
                 "gems": self.gems, "amulets": self.amulets, "charms": self.charms,
                 "cloaked": self.cloaked, "cls": self.cls,
+                "blessing": p.blessing, "sin": p.sin,
+                "quicksilver": self.quicksilver,
+                "age": self.age, "degenerated": self.degenerated,
                 "circle": self.circle(),
-                "notes": self.notes(),
+                "notes": notes,
             }
 
     def circle(self):
         return ZN.circle_of(*self.xy) if self.xy else None
 
     def notes(self):
-        """Short reminders from the game's own rules, shown on the panel."""
+        """Short reminders from the game's own rules, shown on the panel.
+        Cached: recomputed only when something they depend on changes."""
+        p = self.p
+        fight = self.cur is not None
+        key = (round(self.gold), self.gems, p.level, self.cls, self.cloaked,
+               self.circle(), self.trove is not None, self.search is not None,
+               self.age, self.degenerated, self.next_level_at,
+               self.experience, round(p.sin or 0, 3), p.blessing, fight,
+               self.amulets)
+        if key != self._notes_key:
+            self._notes_key = key
+            self._notes = self._make_notes()
+        return self._notes
+
+    def _make_notes(self):
         p, out = self.p, []
+        circle = self.circle()
+        # aging: permanent stat loss every 750 turns
+        left = RU.turns_to_degeneration(self.age, self.degenerated)
+        later = []                   # routine: shown after the urgent ones
+        if left is not None:
+            later.append(f"Next permanent stat loss in ~{left} turns (age "
+                       f"{self.age:.0f}): every move, rest and fight counts.")
+        # gold weight
         loss = RU.gold_speed_loss(self.gold, self.gems, p.level, self.cls)
         limit = RU.gold_limit(self.gems, p.level, self.cls)
-        if loss > 0:
+        if not p.level:
+            pass                     # level not known yet
+        elif loss > 0:
             out.append(f"Gold is slowing you: -{loss:.1f} speed. Bank or spend "
                        f"down to {limit:,.0f} gold.")
         elif self.gold and self.gold > 0.85 * limit:
             out.append(f"Gold {self.gold:,.0f}: over {limit:,.0f} starts "
                        "slowing you down.")
+        # what to spend it on
+        buy = self.shop_advice()
+        if buy:
+            b = buy[0]
+            out.append(f"Best buy: {b['item']} {b['to']:,} ({b['spend']:,} gp, "
+                       f"{b['effect']}) - {b['where']}.")
+        # level
+        if self.next_level_at and self.experience:
+            need = self.next_level_at - self.experience
+            with LOCK:
+                s = STATE["session"]
+                per = s["exp"] / s["fights"] if s.get("fights") else 0
+            if need > 0:
+                t = f"Level {p.level + 1:.0f} in {need:,.0f} exp"
+                if per > 0:
+                    t += f" (~{math.ceil(need / per)} fights at this session's rate)"
+                g = RU.level_gains(self.cls)
+                if g:
+                    t += (f"; each level: +{g['energy']:g} energy, +{g['strength']:g} "
+                          f"strength, +{g['mana']:g} mana")
+                later.append(t + ".")
+        # blessing and sin
+        if p.blessing:
+            k = RU.blessing_rolls(p.sin)
+            if k is None:
+                out.append("Blessed and sinless: you always hit first.")
+            elif k < 6:
+                out.append(f"Sin {p.sin:.2f} is weakening your blessing's first "
+                           f"hit (each Hunt adds {RU.HUNT_SIN}).")
+        # cloak
+        if self.cloaked and not self.cur:
+            out.append(f"Cloaked: -{RU.cloak_drain(circle, p.level, self.cls)} "
+                       "mana a turn, resting finds no mana, and you can't find "
+                       "the trove.")
+        # trove maps
         if self.trove is not None:
             if not RU.map_eligible(p.level, self.gems):
                 out.append(f"No more trove maps: level {p.level:.0f} is over "
@@ -1009,9 +1109,39 @@ class Tracker:
                 if names:
                     out.append("Trove maps drop from: " + ", ".join(names[:4])
                                + (" ..." if len(names) > 4 else ""))
-            if self.cloaked and self.search is not None:
-                out.append("You can't find the trove while cloaked.")
-        return out
+        return out + later
+
+    def shop_advice(self):
+        """Best buys for the gold you carry. Simulating them takes a second
+        or two, so it runs on a background thread; this returns the latest
+        answer and starts a new calculation when gold or stats change."""
+        p = self.p
+        circle = self.circle()
+        if not circle or not p.max_energy or self.gold < 500:
+            return None
+        key = (round(self.gold, -2), p.level, round(p.quickness), round(p.shield),
+               round(p.sword), round(p.strength), circle, self.quicksilver)
+        if key != self._shop_key and not getattr(self, "_shop_busy", False):
+            self._shop_key = key
+            self._shop_busy = True
+            full = Player(**{**vars(p), "energy": p.max_energy})
+            args = (full, self.cls, self.gold, circle, self.quicksilver,
+                    self.xy[0] if self.xy else None)
+            threading.Thread(target=self._shop_worker, args=args, daemon=True).start()
+        return self._shop
+
+    def _shop_worker(self, *args):
+        try:
+            import shop as SH
+            buys = SH.best_buys(*args)
+            self._shop = [b for b in buys if b["risk_cut"] > 0.001] or None
+        except Exception as e:
+            print(f"  ! shop advice failed: {e}", file=sys.stderr)
+        finally:
+            self._shop_busy = False
+            self._shop_ver = getattr(self, "_shop_ver", 0) + 1
+            self._notes_key = None          # show the new advice
+            self.push()
 
     def map_monsters(self, circle=None):
         """Monsters that can spawn here and drop scrolls (trove maps)."""
