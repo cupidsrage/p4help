@@ -106,6 +106,8 @@ LOCK = threading.Lock()
 # gets a fresh Tracker, but the overlay's RollJudge lives on and caches by id.
 _CHAR_IDS = itertools.count(1)
 RECORDER = None   # recorder.Recorder, set by enable_recording()
+MIMIC_HITS = 3.0     # expected hits with none landed -> it's a Mimic (a real
+                     # monster lands none only ~5% of the time)
 ZONE_MIN_INTERVAL_S = 300   # zone advice recalc (~5 s CPU) at most this often
 # Monster numbers learned from the player's own fights (calibrate.py)
 CAL_PATH = os.path.join(HERE, "calibration.json")
@@ -341,6 +343,9 @@ class Tracker:
             # Some endings print nothing we recognise (a Kobold stealing gold
             # and running off), which left a stale fight that froze auto-play.
             low = {b.lower() for b in labels}
+            if (self.cur is not None and self.fs is not None and "melee" in low
+                    and self.cur_mon is not None):
+                self._mimic_check()
             if self.cur is not None:
                 # when your fight prompt appeared: a timeout gives the
                 # monster a 25% free hit and doubles timeout fatigue
@@ -487,6 +492,8 @@ class Tracker:
         m = re.search(r"^\s*blessing\s*:\s*(yes|no)", low)
         if m:
             self.p.blessing = m.group(1) == "yes"
+        if "changes into the form of a mimic" in low:
+            self.note("It was a Mimic all along.")
         if "smurf berries" in low:
             self.note("Smurf berries: " + ("poison eased" if "better" in low or "cured" in low
                                            else "combat fatigue halved and some energy back"))
@@ -619,6 +626,7 @@ class Tracker:
         # arg3 = ROLL(70,30), i.e. monster #70-99 -- the endgame bracket.
         # The Shrieker VANISHES; you're now facing whatever it called.
         if "shrieeeek" in low or "called one of its friends" in low:
+            self._summoned = True        # the next monster is from #70-99
             self.note("SHRIEKER SUMMONED SOMETHING (#70-99). Old monster is GONE.")
             # drop the stale Shrieker; the server will announce the new monster
             self.cur = None
@@ -663,8 +671,13 @@ class Tracker:
                     name = MDB.lookup(mf.group(1))
             if not name:
                 name = MDB.lookup(txt)
+            # Only a plain random encounter has to come from this circle's
+            # monster list; friends, summons and called monsters needn't.
+            plain = (("you are attacked by" in low or "you find and attack" in low)
+                     and not flock and not getattr(self, "_summoned", False))
+            self._summoned = False
             if name:
-                self.encounter(name, size, flock)
+                self.encounter(name, size, flock, plain=plain)
             return
 
         # ---- watch the fight unfold and update live state ----
@@ -703,6 +716,7 @@ class Tracker:
             if "hit you for" in low:
                 changed = True
                 self._wake()           # each pass of the server loop
+                self.fight_hits = getattr(self, "fight_hits", 0) + 1
                 mh = re.search(r"hit you for ([\d.]+) damage", low)
                 cf = getattr(self, "cal_fight", None)
                 if mh and cf:
@@ -800,8 +814,70 @@ class Tracker:
         return fs.m_speed != old
 
     # ---------- fight lifecycle ----------
-    def encounter(self, name, size, flock):
-        d = MDB.scaled(name, size)
+    def mimic_suspect(self, name):
+        """A plain encounter with a monster that can't spawn in this circle
+        can only be a Mimic: it takes the name of any of the 100 monsters
+        (fight.c ROLL(0,100)) but keeps its own stats. Returns the reason, or
+        None. Allows one id either side of the spawn range for rounding."""
+        c = self.circle()
+        if not c or name not in ZN.IDS or name == "A Mimic":
+            return None
+        pool = set(ZN.monster_pool(c))
+        if ZN.IDS.index("A Mimic") not in pool:
+            return None                  # no Mimics here (the marshes...)
+        i = ZN.IDS.index(name)
+        if i in pool or (i - 1) in pool or (i + 1) in pool:
+            return None
+        return f"{name} can't appear in circle {c}"
+
+    def _mimic_monster(self, size):
+        d = MDB.scaled("A Mimic", size)
+        return Monster(name="A Mimic", strength=d["strength"], brains=d["brains"],
+                       speed=d["speed"], energy=d["energy"], shield=0.0,
+                       experience=d["experience"], specials=("Mi",))
+
+    def _mimic_check(self):
+        """At each of your fight prompts: a Mimic never hits back. If this
+        monster should have hit you about MIMIC_HITS times by now and hasn't
+        once, it's a Mimic wearing the name of one that belongs here."""
+        from planner import hits_per_turn
+        if self.cur.get("mimic") or getattr(self, "fight_hits", 0):
+            return
+        c = self.circle()
+        if not c or ZN.IDS.index("A Mimic") not in set(ZN.monster_pool(c)):
+            return
+        self.fight_prompts = getattr(self, "fight_prompts", 0) + 1
+        self.hits_expected = (getattr(self, "hits_expected", 0.0)
+                              + hits_per_turn(self.p, self.cur_mon, self.fs))
+        if self.hits_expected >= MIMIC_HITS:
+            self._become_mimic(f"{self.cur['name']} should have hit you about "
+                               f"{self.hits_expected:.0f} times and hasn't once")
+
+    def _become_mimic(self, why):
+        """Mid-fight: it's been a Mimic all along. Keep the damage done."""
+        if not self.cur or not self.cur_mon or not self.fs or self.cur.get("mimic"):
+            return
+        old, fs = self.cur_mon, self.fs
+        m = self._mimic_monster(self.cur["size"])
+        dealt = (old.energy + old.shield) - (fs.m_energy + fs.m_shield)
+        new = FightState.opening(self.p, m)
+        new.m_energy = max(1.0, m.energy - dealt)
+        new.luckout_spent, new.aon_spent = fs.luckout_spent, fs.aon_spent
+        new.rounds, new.ticks = fs.rounds, fs.ticks
+        self.cur_mon, self.fs, self.cal_fight = m, new, None
+        self.cur.update(name=f"{self.cur['name']} (Mimic)", mimic=True,
+                        energy=m.energy, strength=m.strength, brains=m.brains,
+                        speed=m.speed, experience=m.experience,
+                        luckout=luckout_chance(self.p, m), aon=aon_chance(self.p, m),
+                        bolt=bolt_plan(self.p, m))
+        self.cur["warnings"].insert(0, f"MIMIC: {why}. It never hits back and is "
+                                       "hard to run from (5%) - just melee it.")
+        self.note(f"MIMIC spotted: {why}")
+        self.refresh_advice()
+
+    def encounter(self, name, size, flock, plain=False):
+        mimic_why = self.mimic_suspect(name) if plain else None
+        d = MDB.scaled("A Mimic" if mimic_why else name, size)
         if not d:
             return
         # Correct the 4.03-table numbers with what this player's own fights
@@ -816,9 +892,17 @@ class Tracker:
 
         self.cur_mon = m
         self.fs = FightState.opening(self.p, m)
+        self.fight_prompts, self.fight_hits, self.hits_expected = 0, 0, 0.0
+
         self.aon_pending = False
 
         warn = list(MDB.notes_for(d))
+        if mimic_why:
+            self.cal_fight = None            # its numbers aren't the name's
+            warn.insert(0, f"MIMIC: {mimic_why}, so it's a Mimic in disguise. It "
+                           "never hits back and is hard to run from (5%) - just "
+                           "melee it.")
+            self.note(f"MIMIC spotted: {mimic_why}")
         if (er, sr) != (1.0, 1.0):
             warn.append(f"Size {size} numbers from your own fights: energy "
                         f"x{er:.2f}, strength x{sr:.2f}.")
@@ -827,7 +911,7 @@ class Tracker:
         self.max_size_seen = max(self.max_size_seen, size)
         if not self.have_magic:
             warn.insert(0, "Brains/Magic Level unknown — open Info → Stats.")
-        tr_type = MDB.MONSTERS[name][5]
+        tr_type = MDB.MONSTERS[d["name"]][5]
         if (self.trove is not None and tr_type == RU.MAP_TREASURE_TYPE
                 and RU.map_eligible(self.p.level, self.gems)):
             pm = RU.map_chance_per_kill(tr_type, size)
@@ -835,7 +919,8 @@ class Tracker:
                            "if you kill it.")
 
         self.cur = {
-            "name": d["name"], "size": size, "flock": flock,
+            "name": f"{name} (Mimic)" if mimic_why else d["name"],
+            "mimic": bool(mimic_why), "size": size, "flock": flock,
             "energy": d["energy"], "strength": d["strength"],
             "brains": d["brains"], "base_brains": MDB.MONSTERS[name][1],
             "experience": d["experience"], "speed": d["speed"],
