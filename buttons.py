@@ -547,7 +547,9 @@ class ButtonOverlay:
             self.sub.configure(text="reading your stats after that fight")
             return True
         if poison is None:
-            want, why = "no", "poison unknown: playing it safe"
+            ss = d.get("statsync") or {}
+            want, why = "no", ("poison unknown: playing it safe (stat fetches "
+                               f"sent {ss.get('sent', 0)}, read {ss.get('replies', 0)})")
         elif poison > 0:
             want, why = "no", f"poisoned ({poison:g})"
         else:

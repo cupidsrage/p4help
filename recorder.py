@@ -201,7 +201,9 @@ class Recorder:
             if not s:
                 return
             screen = s["screen"].snapshot()
-            lines = [ln.rstrip("\r") for ln in text.split("\n") if ln.strip()]
+            # client messages may end in a newline or a NUL byte
+            lines = [ln.rstrip("\r") for ln in text.replace("\x00", "\n").split("\n")
+                     if ln.strip()]
             if "password" in (screen["prompt"] or "").lower():
                 lines = ["***" for _ in lines]
                 self._raw(">", "***\n")

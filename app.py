@@ -91,6 +91,7 @@ STATE = {
     "rerolls": None,
     "roll": None,       # character creation: the stats roll on screen (see reroll.py)
     "prompt": "",       # the question the current buttons answer
+    "statsync": None,   # quiet stat-sheet fetches: sent / replies / last
     "trove": None,
     "zone": None,
     "log": [],
@@ -302,7 +303,7 @@ class Tracker:
         menu = self.class_menu
         if not menu:
             return
-        for ln in text.split("\n"):
+        for ln in text.replace("\x00", "\n").split("\n"):
             m = re.match(r"^\s*1([0-7])\s*$", ln)
             if m:
                 i = int(m.group(1))
