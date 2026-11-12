@@ -65,6 +65,11 @@ TREASURE_WAIT_S = 8.0
 # Monsters to Evade every round no matter what the advisor's odds say.
 # Matched case-insensitively against the monster's name ("A Moron").
 ALWAYS_EVADE = ["Moron"]
+# Survival rules on top of the advisor's pick (auto-play only):
+SAFE_MAX_DEATH = 0.02     # advisor's move kills you more often than this -> safest move
+GROUP_RESERVE = 0.50      # in a group, don't let a fight leave you below this of max energy
+LOW_ENERGY = 0.30         # below this of max energy, take the safest move ...
+SURE_WIN = 0.97           # ... unless the fight is this close to certain
 
 BG    = "#16130e"
 PANEL = "#211c14"
@@ -472,6 +477,36 @@ class ButtonOverlay:
         btns = self._button_texts()
         return bool(btns and btns[0] == "more")
 
+    @staticmethod
+    def _safe_move(f, p):
+        """The advisor's top move, unless a survival rule says otherwise.
+
+        The advisor scores each fight on its own; a group of monsters (each
+        killed one calls a friend) can still grind you down, and its top
+        pick can carry real death risk. Returns a move dict; "safety" says
+        which rule changed it."""
+        moves = f.get("moves") or []
+        top = moves[0]
+        death = lambda m: m.get("death", max(0.0, 1 - m.get("win", 0) - m.get("flee", 0)))
+        safest = min(moves, key=death)
+        evade = next((m for m in moves if m.get("move") == "evade"), None)
+        e, mx = p.get("energy") or 0, p.get("max_energy") or 0
+
+        def pick(m, why):
+            return dict(m, safety=why) if m is not top else top
+
+        if death(top) > SAFE_MAX_DEATH and death(safest) < death(top):
+            return pick(safest, f"{death(top)*100:.0f}% death risk")
+        if mx:
+            after = e - top.get("energy_lost", 0)
+            if (f.get("flock") and evade and after < GROUP_RESERVE * mx
+                    and death(evade) <= death(top) + 0.05):
+                return pick(evade, f"group: would drop to {after:.0f}/{mx:g} energy")
+            if (e < LOW_ENERGY * mx and top.get("win", 0) < SURE_WIN
+                    and death(safest) < death(top)):
+                return pick(safest, f"low energy {e:g}/{mx:g}")
+        return top
+
     def _forced_evade(self, name):
         """The always-evade entry this monster matches, or None."""
         low = (name or "").lower()
@@ -653,7 +688,7 @@ class ButtonOverlay:
         # in a fight: whatever stopped resting before no longer applies
         self._rest_last_e, self._rest_stalls, self._rest_stopped = None, 0, None
 
-        mv = f["moves"][0]
+        mv = self._safe_move(f, d.get("player") or {})
         forced = self._forced_evade(f.get("name"))
         if forced:
             ev = next((m for m in f["moves"] if m.get("move") == "evade"), {})
@@ -742,6 +777,8 @@ class ButtonOverlay:
                 odds = f"{mv['flee']*100:.0f}% escape"
             if mv.get("forced"):
                 odds = f"always evade \"{mv['forced']}\" \u00b7 " + odds
+            elif mv.get("safety"):
+                odds = f"safety: {mv['safety']} \u00b7 " + odds
             self.sub.configure(text=odds)
 
     def run(self):

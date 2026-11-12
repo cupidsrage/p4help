@@ -680,7 +680,8 @@ class Tracker:
         moves = score_moves(self.p, m, st, trials=420)
         self.cur["moves"] = [{
             "move": x["move"], "arg": x["arg"], "win": x["win"],
-            "flee": x["flee"], "energy_lost": x["energy_lost"],
+            "flee": x["flee"], "death": x.get("death", 0.0),
+            "energy_lost": x["energy_lost"],
         } for x in moves]
         self.cur["why"] = explain(self.p, m, st, moves)
 

@@ -27,6 +27,11 @@ panel docked on the right. Close the window and everything shuts down.
   game for you: combat moves, the Spell → Magic Bolt → mana steps, and "More"
   prompts. It only types while the launcher window is in front, so alt-tabbing
   away pauses it. It's off by default and remembers your choice.
+- **Survival rules (auto-play):** on top of the advisor's pick it takes the safest
+  move (often Evade) when the pick has over 2% death risk, when you're under 30%
+  energy and the fight isn't a near-certain win, and in a **group** (friends
+  appearing) when the fight would leave you under half your max energy. The hint
+  says which rule fired.
 - **Always evade:** auto-play presses **Evade** every round against monsters on
   the `"always_evade"` list in `launcher.json` (default `["Moron"]`), whatever
   the odds. Add names to flee from other monsters too.
