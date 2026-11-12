@@ -708,6 +708,8 @@ class Tracker:
             STATE["fight"] = self.cur
 
     def end_fight(self):
+        if getattr(self, "_zone_after_fight", False):
+            threading.Timer(0.5, self.push_zone).start()
         self.stats_due = True
         self.fight_end_at = time.time()
         self.cur = None
@@ -717,20 +719,49 @@ class Tracker:
         with LOCK:
             STATE["fight"] = None
 
+    def _zone_key(self):
+        p = self.p
+        return (p.level, p.brains, p.strength, p.quickness, p.magiclvl,
+                p.max_energy, p.sword, p.shield)
+
     def push_zone(self):
-        """Kick off a zone recalc on a background thread (it's slow: it
-        actually simulates sessions). Never runs on the packet thread."""
+        """Keep the zone advice current.
+
+        The recalc is SLOW (~5 s of CPU: it simulates whole hunting
+        sessions) and depends only on the character's stats, not on where
+        they stand. It used to rerun on every step while moving; that kept
+        the CPU busy and delayed noticing a fight the game started mid-move.
+        Now: moving only re-reads the cached rows; the recalc runs when the
+        stats change, and never during a fight (it waits for the fight to
+        end)."""
         if self.p.brains <= 0 or self.p.strength <= 0:
             return
+        rows = getattr(self, "_zone_rows", None)
+        if rows is not None and self.xy:
+            cur = ZN.circle_of(*self.xy)
+            with LOCK:
+                z = STATE.get("zone") or {}
+                z = dict(z, current=cur,
+                         current_row=next((r for r in rows if r["circle"] == cur), None))
+                STATE["zone"] = z
+        if getattr(self, "_zone_done_key", None) == self._zone_key():
+            return                      # stats unchanged: cached rows are right
+        if self.cur is not None:
+            self._zone_after_fight = True
+            return                      # don't burn CPU mid-fight
         if getattr(self, "_zone_busy", False):
             return                      # one at a time
         self._zone_busy = True
-        snap = (self.p, self.xy)
+        self._zone_after_fight = False
+        key = self._zone_key()
+        snap = (self.p, self.xy, key)
         threading.Thread(target=self._zone_worker, args=snap, daemon=True).start()
 
-    def _zone_worker(self, player, xy):
+    def _zone_worker(self, player, xy, key=None):
         try:
             best, rows = ZN.recommend(player, here=xy, measured=True)
+            self._zone_rows = rows
+            self._zone_done_key = key
             cur = ZN.circle_of(*xy) if xy else None
             curr = next((r for r in rows if r["circle"] == cur), None)
             with LOCK:
