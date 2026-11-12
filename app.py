@@ -189,7 +189,16 @@ class Tracker:
 
     # ---------- packet framing ----------
     def feed(self, text):
-        for line in text.split("\n"):
+        # Network chunks can end anywhere, including mid-line or right after
+        # a packet header. Only complete lines are parsed; the unfinished
+        # tail waits for the next chunk. (Before, the empty piece after a
+        # chunk's final newline was parsed as a line too, and could be
+        # taken as the text of a header that ended the chunk -- losing e.g.
+        # "You are attacked by ...".)
+        data = getattr(self, "_partial", "") + text
+        lines = data.split("\n")
+        self._partial = lines.pop()
+        for line in lines:
             self._line(line)
         # Recompute fight advice once per batch of server data, not once per
         # damage line: a round's "You hit..." and "...hit you" usually arrive
@@ -336,13 +345,21 @@ class Tracker:
         digit plus data; a button click is "1" + its 0-based position, e.g.
         "12" = third button (seen in recordings). Used to learn which class
         was clicked on the class menu."""
+        i = click_index(text)
+        with LOCK:
+            labels = list(STATE.get("buttons") or [])
+        clicked = labels[i] if i is not None and i < len(labels) else None
+        if clicked:
+            self.last_click = clicked
         cf = getattr(self, "cal_fight", None)
-        if cf is not None:
-            i = click_index(text)
-            with LOCK:
-                labels = list(STATE.get("buttons") or [])
-            if i is not None and i < len(labels):
-                cf["clicked"].append(labels[i])
+        if cf is not None and clicked:
+            cf["clicked"].append(clicked)
+        # All or Nothing cast: it can only be tried once per fight, and the
+        # server shows a failure as "You hit X for 0 damage!" (no "grows
+        # stronger" message), so the tracker must remember the cast itself.
+        if clicked and clicked.strip().lower() == "all or nothing" and self.fs is not None:
+            self.fs.aon_spent = True
+            self.aon_pending = True
         menu = self.class_menu
         if not menu:
             return
@@ -612,9 +629,13 @@ class Tracker:
                 self.note("luckout FAILED — falling back")
                 changed = True
 
-            # AoN failed: it doubles strength and speed
-            if "you blew it" not in low and (
-                    "grows stronger" in low or "gets stronger" in low):
+            # AoN failed: it doubles strength and speed. On this server the
+            # only sign is "You hit X for 0 damage!" right after the cast.
+            aon_zero = (getattr(self, "aon_pending", False)
+                        and re.search(r"you hit .*? for 0 damage", low))
+            if aon_zero or ("you blew it" not in low and (
+                    "grows stronger" in low or "gets stronger" in low)):
+                self.aon_pending = False
                 self.fs.m_strength *= 2.0
                 self.fs.m_speed *= 2.0
                 self.fs.aon_spent = True
@@ -688,6 +709,7 @@ class Tracker:
 
         self.cur_mon = m
         self.fs = FightState.opening(self.p, m)
+        self.aon_pending = False
 
         warn = list(MDB.notes_for(d))
         if (er, sr) != (1.0, 1.0):

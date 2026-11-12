@@ -70,6 +70,7 @@ SAFE_MAX_DEATH = 0.02     # advisor's move kills you more often than this -> saf
 GROUP_RESERVE = 0.50      # in a group, don't let a fight leave you below this of max energy
 LOW_ENERGY = 0.30         # below this of max energy, take the safest move ...
 SURE_WIN = 0.97           # ... unless the fight is this close to certain
+AON_ONLY_IF_DEATH = 0.50  # cast All or Nothing only if everything else is this deadly
 
 BG    = "#16130e"
 PANEL = "#211c14"
@@ -505,6 +506,16 @@ class ButtonOverlay:
         def pick(m, why):
             return dict(m, safety=why) if m is not top else top
 
+        # All or Nothing is a gamble: failing doubles the monster's strength
+        # and speed (a size-9 Cocodrill went from ~200 to 1551 damage after
+        # three failed casts and killed the player). Only gamble when every
+        # other move is at least AON_ONLY_IF_DEATH likely to get you killed.
+        if top.get("move") == "aon":
+            # next move in the advisor's ranking that's reasonably safe
+            alt = next((m for m in moves[1:] if m.get("move") != "aon"
+                        and death(m) < AON_ONLY_IF_DEATH), None)
+            if alt is not None:
+                return dict(alt, safety="All or Nothing is too risky here")
         if death(top) > SAFE_MAX_DEATH and death(safest) < death(top):
             return pick(safest, f"{death(top)*100:.0f}% death risk")
         if mx:

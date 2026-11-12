@@ -457,7 +457,25 @@ NO_MANA_WIN = 0.95     # a no-mana plan this sure to win ...
 NO_MANA_DEATH = 0.02   # ... and this safe beats any plan that spends mana
 
 
+AON_ONLY_IF_DEATH = 0.50   # rank AoN first only if everything else is this deadly
+
+
 def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
+    """Score and rank every legal move (see _score_moves). All or Nothing is
+    never ranked first while another move gives better than even odds of
+    surviving: a failed cast doubles the monster's strength and speed (a
+    size-9 Cocodrill hit for 1551 after three failures and killed a player)."""
+    res = _score_moves(player, mon, st, trials, mana_fallback, only)
+    if only is None and res and res[0]["move"] == "aon":
+        # next move in the advisor's own ranking that's reasonably safe
+        best = next((r for r in res[1:]
+                     if r.get("death", 1.0) < AON_ONLY_IF_DEATH), None)
+        if best is not None:
+            res = [best] + [r for r in res if r is not best]
+    return res
+
+
+def _score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
     """
     Given the CURRENT fight state, score each legal move by playing the rest
     of the fight out sensibly after it. This is the 'what do I press now?'
@@ -559,8 +577,8 @@ def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
     plain = [r["move"] for r in results if r["move"] not in MANA_MOVES]
     if plain and any(r["move"] in MANA_MOVES or r.get("mana_spent", 0) > 0
                      for r in results):
-        nm = score_moves(player, mon, st, trials=max(150, trials // 2),
-                         mana_fallback=False, only=set(plain))
+        nm = _score_moves(player, mon, st, trials=max(150, trials // 2),
+                          mana_fallback=False, only=set(plain))
         good = [r for r in nm if r["win"] >= NO_MANA_WIN
                 and r["death"] <= NO_MANA_DEATH]
         if good:
