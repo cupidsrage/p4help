@@ -38,6 +38,7 @@ import urllib.request
 import urllib.error
 
 import reroll
+from statsync import is_treasure
 
 POLL_URL = "http://127.0.0.1:8420/state"
 POLL_MS = 400
@@ -58,6 +59,9 @@ ROLL_REPEAT_S = 3.0
 # can't fill: poisoned, or something else is draining it). 1 if poisoned.
 REST_REPEAT_S = 2.0
 REST_STALLS = 3
+# Treasure: wait this long for a fresh stat sheet (is the last fight's poison
+# known?) before answering on the last known poison value.
+TREASURE_WAIT_S = 8.0
 
 BG    = "#16130e"
 PANEL = "#211c14"
@@ -143,6 +147,7 @@ class ButtonOverlay:
         self._rest_last_e = None     # energy when Rest was last pressed
         self._rest_stalls = 0        # rests in a row that didn't raise energy
         self._rest_stopped = None    # energy we gave up at (stays until it moves)
+        self._treasure_seen = None   # (prompt, labels) and when it appeared
 
         self._build()
         if not self.embedded:
@@ -495,6 +500,45 @@ class ButtonOverlay:
         else:
             self.sub.configure(text=dec["why"])
 
+    def _treasure_step(self, d):
+        """'You have found some treasure. Do you want to inspect it?' and the
+        like: Yes when not poisoned, No when poisoned. Waits briefly for a
+        stat sheet read after the fight, since that fight may have poisoned
+        us. Returns True when it handled the panel."""
+        labels = d.get("buttons") or []
+        low = [str(b).strip().lower() for b in labels]
+        prompt = d.get("prompt") or ""
+        if not ("yes" in low and "no" in low and is_treasure(prompt)):
+            self._treasure_seen = None
+            return False
+        key = (prompt, tuple(low))
+        if not self._treasure_seen or self._treasure_seen[0] != key:
+            self._treasure_seen = (key, time.monotonic())
+        waited = time.monotonic() - self._treasure_seen[1]
+
+        p = d.get("player") or {}
+        poison, fresh = p.get("poison"), p.get("stats_fresh")
+        self._show_labels(labels)
+        self._reset_cells()
+        if not fresh and waited < TREASURE_WAIT_S:
+            self.hint.configure(text="Treasure: checking for poison\u2026", fg=INK)
+            self.sub.configure(text="reading your stats after that fight")
+            return True
+        if poison is None:
+            want, why = "no", "poison unknown: playing it safe"
+        elif poison > 0:
+            want, why = "no", f"poisoned ({poison:g})"
+        else:
+            want, why = "yes", "not poisoned" + ("" if fresh else " (last check)")
+        num = low.index(want) + 1
+        col = GREEN if self._flash else GREEN_HI
+        self._light(num, col, GREEN_HI)
+        self._press_key(num, ("treasure", key, want))
+        self.hint.configure(text=f"Treasure \u2192 {want.title()} ({num})",
+                            fg=GREEN_HI if want == "yes" else AMBER)
+        self.sub.configure(text=why)
+        return True
+
     def _rest_step(self, d):
         """Out of combat on the main menu with energy below max: Rest until
         full. Stops when resting stops raising energy (poisoned, etc.).
@@ -558,6 +602,10 @@ class ButtonOverlay:
             self._press_key(1, ("more", tuple(self._button_texts())), repeat_same=True)
             self.hint.configure(text="Press 1 — More", fg=GREEN_HI)
             self.sub.configure(text="clear the text to continue")
+            return
+
+        # Treasure / gold: Yes unless poisoned, then No
+        if self._treasure_step(d):
             return
 
         # Character creation: "Do you wish to keep these stats?"
