@@ -452,7 +452,12 @@ def danger_of(player, mon, st):
 
 
 # ---------------------------------------------------------------- next move
-def score_moves(player, mon, st, trials=500):
+MANA_MOVES = {"bolt", "aon", "might", "paralyze"}
+NO_MANA_WIN = 0.95     # a no-mana plan this sure to win ...
+NO_MANA_DEATH = 0.02   # ... and this safe beats any plan that spends mana
+
+
+def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
     """
     Given the CURRENT fight state, score each legal move by playing the rest
     of the fight out sensibly after it. This is the 'what do I press now?'
@@ -461,6 +466,8 @@ def score_moves(player, mon, st, trials=500):
     results = []
 
     for mv in legal_moves(player, mon, st):
+        if only is not None and mv not in only:
+            continue
         arg = None
         if mv == "bolt":
             arg = _bolt_to_kill(player, st, mon)
@@ -509,7 +516,8 @@ def score_moves(player, mon, st, trials=500):
                     dmg_taken = rounds_to_kill * incoming
                     losing = dmg_taken > s.p_energy * 0.6
 
-                    n = _bolt_to_kill(player, s, mon) if losing else None
+                    n = (_bolt_to_kill(player, s, mon)
+                         if losing and mana_fallback else None)
                     if n and n <= s.p_mana:
                         nxt, narg = "bolt", n
                     else:
@@ -538,6 +546,33 @@ def score_moves(player, mon, st, trials=500):
     for r in results:
         r["danger"] = danger
         r["cost"] = true_cost(player, st, r, danger)
+
+    if only is not None:
+        return results          # internal re-score: no ranking needed
+
+    # Mana is only worth spending when you can't win safely without it.
+    # The playout above bolts whenever melee is "losing the race", so even a
+    # Melee line carries mana -- which made an immediate Bolt look no dearer
+    # and got it picked against big monsters melee alone beats. Re-score the
+    # moves that cost no mana with a playout that never bolts; if one is a
+    # near-sure, safe win, recommend it (with its no-mana numbers) first.
+    plain = [r["move"] for r in results if r["move"] not in MANA_MOVES]
+    if plain and any(r["move"] in MANA_MOVES or r.get("mana_spent", 0) > 0
+                     for r in results):
+        nm = score_moves(player, mon, st, trials=max(150, trials // 2),
+                         mana_fallback=False, only=set(plain))
+        good = [r for r in nm if r["win"] >= NO_MANA_WIN
+                and r["death"] <= NO_MANA_DEATH]
+        if good:
+            for r in good:
+                r["danger"] = danger_of(player, mon, st)
+                r["cost"] = true_cost(player, st, r, r["danger"])
+                r["no_mana"] = True
+            good.sort(key=lambda r: (-round(r["win"], 2), r["cost"]))
+            chosen = {r["move"] for r in good}
+            others = [r for r in results if r["move"] not in chosen]
+            others.sort(key=lambda r: (-r["win"], r["cost"]))
+            return good + others
 
     best_win = max((r["win"] for r in results), default=0.0)
 

@@ -27,6 +27,13 @@ panel docked on the right. Close the window and everything shuts down.
   game for you: combat moves, the Spell → Magic Bolt → mana steps, and "More"
   prompts. It only types while the launcher window is in front, so alt-tabbing
   away pauses it. It's off by default and remembers your choice.
+- **Learns real monster numbers:** the 4.03 tables may over- or under-state
+  monsters on this server, especially big sizes. After every fight you win by
+  damage (not luckout/spells) it compares what the monster really took and dealt
+  with the prediction, per size, and corrects future advice once a size has 3+
+  fights (saved in `calibration.json`; also learned from all `recordings/` at
+  startup). The advisor notes when a correction is in use. See it with
+  `python calibrate.py`.
 - **Survival rules (auto-play):** on top of the advisor's pick it takes the safest
   move (often Evade) when the pick has over 2% death risk, when you're under 30%
   energy and the fight isn't a near-certain win, and in a **group** (friends
@@ -37,8 +44,8 @@ panel docked on the right. Close the window and everything shuts down.
   the odds. Add names to flee from other monsters too.
 - **Treasure & gold:** with Auto-play on, "Do you want to inspect it?" / "pick
   them up?" questions get **Yes** when you're not poisoned and **No** when you
-  are. "Poisoned" comes from Info → Stats or game text saying you were poisoned;
-  with no sign of poison it says Yes.
+  are. After a fight it first refreshes your stats in the background to see
+  whether that fight poisoned you (game text saying "poisoned" also counts).
 - **Auto-rest:** with Auto-play on, after a fight it presses **Rest** on the main
   menu until energy is full. If resting stops raising energy (poisoned, or energy
   draining) it stops after 3 tries, or after 1 if Info → Stats showed poison, and
@@ -91,10 +98,12 @@ Leave it on a second monitor while you play.
 ```
 If the game can't connect, run `ipconfig /flushdns`.
 
-**In-game, once per login:** open **Info → Stats** so Brains, Magic Level and
-Poison load (they're not sent as packets). An automatic quiet fetch exists
-(`statsync.py`, `"quiet_stats": true` in `launcher.json`) but is **off**: on the
-live server it locked up the game.
+**Stats load automatically.** Brains, Magic Level and Poison only appear on the
+Info → Stats sheet, so the proxy asks the server for it quietly (the same
+request the client sends when you click your name) at login, after fights, on
+level-up and once a minute while idle, and keeps the reply off your screen. If
+the server stops answering it switches itself off for the session. Turn off with
+`"background_stats": false` in `launcher.json` or `app.py --no-auto-stats`.
 
 Flags: `-h <ip>` upstream · `-w <port>` dashboard · `--log raw.txt` capture traffic ·
 `--record [folder]` record screens + inputs for `analyze.py`
@@ -169,6 +178,7 @@ turns unspendable mana into hundreds of damage.
 - `launcher.py` — the all-in-one app window (run this, or `Phantasia.bat`)
 - `app.py` — proxy + web server + packet parser
 - `statsync.py` — quietly keeps the Info → Stats data current
+- `calibrate.py` — learns real monster energy/strength per size from your fights
 - `reroll.py` — scores character rolls and decides Reroll/Keep
 - `recorder.py` — records screens + your inputs; `analyze.py` — summarises them
 - `ui.html` — the dashboard

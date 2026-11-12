@@ -4,7 +4,8 @@ Keep Info -> Stats data (brains, magic level, poison, sin, age...) current
 without the player opening it.
 
 The game client asks the server for a player's stat sheet with one line:
-"5<name>" (what clicking a name in the player list sends). The server replies
+"5" NUL "<name>" NUL (what clicking a name in the player list sends; client
+messages are NUL-separated fields). The server replies
 with a PLAYER_INFO packet: "35", a line count, then "<name> the <class>",
 "Location: ...", ..., "Brains: 84", "Magic Level: 3", "Poison: 0.0000", ...
 
@@ -18,12 +19,14 @@ When: at login, after each fight, after a level change, and every
 REFRESH_S while idle.
 """
 
+import re
 import threading
 import time
 
 REFRESH_S = 60.0          # idle refresh interval
 QUIET_S = 1.5             # don't inject within this long of the player's input
 REPLY_TIMEOUT_S = 5.0     # stop waiting for a reply after this
+MAX_UNANSWERED = 3        # this many unanswered requests: stop for the session
 
 
 TREASURE_WORDS = ("treasure", "gold", "gem", "pick it up", "pick them up",
@@ -36,21 +39,22 @@ def is_treasure(prompt):
 
 
 class ReplyFilter:
-    """Server -> client byte filter that drops the stat-sheet replies we
-    asked for. Everything else passes through unchanged.
+    """Server -> client filter that drops the stat-sheet reply we asked for.
 
-    A reply is only dropped when it looks exactly like one: a "35" line,
-    then a number, then a line starting with "<our name> the ". Anything
-    else is forwarded as-is."""
+    It NEVER holds data back: every chunk is forwarded at once. A reply is
+    only removed when the whole sheet is inside the chunk being forwarded:
+    a "35" line, a line count, "<our name> the ...", then that many lines.
+    Anything else -- including a sheet split across chunks -- passes through
+    untouched (worst case the stat window shows; the game can't stall).
+
+    (An earlier version held back "35" lines while deciding. A speed of 35
+    produced such lines, and the game froze waiting for the rest.)"""
 
     def __init__(self):
         self.lock = threading.Lock()
         self.pending = 0          # replies we asked for and haven't seen
         self.deadline = 0.0
         self.name = b""
-        self.buf = b""            # partial line (only while filtering)
-        self.hold = []            # lines held while deciding
-        self.skip = 0             # lines of a matched reply still to drop
         self.dropped = 0
 
     def expect(self, name):
@@ -61,54 +65,30 @@ class ReplyFilter:
 
     def filter(self, data):
         with self.lock:
-            if (not self.pending and not self.hold and not self.skip
-                    and not self.buf):
-                return data                       # fast path: not filtering
-            if self.pending and time.time() > self.deadline:
-                self.pending = 0                  # gave up waiting
-            data = self.buf + data
-            lines = data.split(b"\n")
-            self.buf = lines.pop()                # last piece: maybe partial
-            out = []
-            for ln in lines:
-                self._line(ln, out)
-            res = b"".join(x + b"\n" for x in out)
-            if not self.pending and not self.hold and not self.skip and self.buf:
-                res += self.buf                   # done filtering: flush partial
-                self.buf = b""
-            return res
-
-    def _line(self, ln, out):
-        bare = ln.rstrip(b"\r").strip()
-        if self.skip:
-            self.skip -= 1
-            return
-        if self.hold:
-            self.hold.append(ln)
-            if len(self.hold) == 2:
-                if not bare.isdigit():
-                    out.extend(self.hold)
-                    self.hold = []
-                return
-            # third line: is it our sheet?
-            count = int(self.hold[1].rstrip(b"\r").strip())
-            if bare.startswith(self.name + b" the ") or bare == self.name:
-                self.skip = max(0, count - 1)
-                self.pending = max(0, self.pending - 1)
-                self.dropped += 1
-            else:
-                out.extend(self.hold)
-            self.hold = []
-            return
-        if self.pending and bare == b"35":
-            self.hold = [ln]
-            return
-        out.append(ln)
+            if not self.pending:
+                return data
+            if time.time() > self.deadline:
+                self.pending = 0
+                return data
+            m = re.search(rb"(?:^|\n)(35\r?\n(\d+)\r?\n)" + re.escape(self.name)
+                          + rb" the ", data)
+            if not m:
+                return data
+            start = m.start(1)
+            pos = m.end(1)                 # start of the first counted line
+            for _ in range(int(m.group(2))):
+                nl = data.find(b"\n", pos)
+                if nl < 0:
+                    return data            # sheet continues in a later chunk
+                pos = nl + 1
+            self.pending -= 1
+            self.dropped += 1
+            return data[:start] + data[pos:]
 
 
 class StatsSync:
     def __init__(self, tracker, server_sock, send_lock, reply_filter,
-                 state, state_lock, enabled=True):
+                 state, state_lock, enabled=True, on_sent=None):
         self.t = tracker
         self.sock = server_sock
         self.send_lock = send_lock
@@ -122,6 +102,8 @@ class StatsSync:
         self.last_sync = 0.0
         self.alive = True
         self.sent = 0
+        self.on_sent = on_sent    # e.g. write the request into the recording
+        self.unanswered = 0       # requests in a row with no reply
 
     def note_client(self, data):
         """Called with every client -> server chunk (bytes).
@@ -155,6 +137,9 @@ class StatsSync:
     def tick(self):
         now = time.time()
         name = (self.t.name or "").strip()
+        with self.filter.lock:              # a reply that never came: stop waiting
+            if self.filter.pending and now > self.filter.deadline:
+                self.filter.pending = 0
         if not (self.enabled and name) or self.filter.pending or self.partial:
             return
         if now - self.last_client < QUIET_S:
@@ -163,7 +148,18 @@ class StatsSync:
             return
         if not self._on_main_menu():
             return
-        req = b"5" + name.encode("utf-8", "replace") + self.eol
+        # Same format the client uses when you click a name in the player
+        # list (seen in a recording): type "5", NUL, the name, NUL.
+        if self.sent and self.filter.dropped < self.sent:
+            self.unanswered = self.sent - self.filter.dropped
+            if self.unanswered >= MAX_UNANSWERED:
+                self.enabled = False       # not working on this server: stop
+                with self.state_lock:
+                    st = dict(self.state.get("statsync") or {})
+                    st["disabled"] = f"{self.unanswered} requests got no reply"
+                    self.state["statsync"] = st
+                return
+        req = b"5\x00" + name.encode("utf-8", "replace") + b"\x00"
         self.filter.expect(name)
         try:
             with self.send_lock:
@@ -174,6 +170,11 @@ class StatsSync:
         self.t.stats_due = False
         self.last_sync = now
         self.sent += 1
+        if self.on_sent:
+            try:
+                self.on_sent(req)
+            except Exception:
+                pass
         with self.state_lock:
             self.state["statsync"] = {"sent": self.sent,
                                       "replies": self.filter.dropped,

@@ -42,6 +42,7 @@ import trove as TR
 import zones as ZN
 import reroll as RR
 import statsync as SS
+import calibrate as CAL_MOD
 from planner import plan, FightState, score_moves, explain, might_of
 
 LISTEN_HOST = "127.0.0.1"
@@ -103,10 +104,14 @@ LOCK = threading.Lock()
 # gets a fresh Tracker, but the overlay's RollJudge lives on and caches by id.
 _CHAR_IDS = itertools.count(1)
 RECORDER = None   # recorder.Recorder, set by enable_recording()
-# Quietly fetch the Info -> Stats sheet (statsync.py). OFF: on the live
-# server the requests got no recognisable reply and the game locked up /
-# errored. Needs the real reply format from a recording before re-enabling.
-AUTO_STATS = False
+ZONE_MIN_INTERVAL_S = 300   # zone advice recalc (~5 s CPU) at most this often
+# Monster numbers learned from the player's own fights (calibrate.py)
+CAL_PATH = os.path.join(HERE, "calibration.json")
+CAL = None
+# Quietly fetch the Info -> Stats sheet (statsync.py). The first version sent
+# a malformed request (no NUL after the "5") and its reply filter could hold
+# data back; both fixed using a real recording of the client's own request.
+AUTO_STATS = True
 
 
 def snapshot_state():
@@ -124,6 +129,20 @@ def enable_recording(folder=None):
         RECORDER = recorder.Recorder(folder or os.path.join(HERE, "recordings"),
                                      LINECOUNT, snapshot_state)
     return RECORDER
+
+
+def click_index(text):
+    """0-based button position of a client click, or None. Client messages
+    are fields separated by NUL (or newline): a click is "1" then the
+    position, either as separate fields ("1", "2") or run together ("12")."""
+    toks = [t.strip() for t in re.split(r"[\x00\n]", text) if t.strip()]
+    for k, tok in enumerate(toks):
+        m = re.fullmatch(r"1([0-7])", tok)
+        if m:
+            return int(m.group(1))
+        if tok == "1" and k + 1 < len(toks) and re.fullmatch(r"[0-7]", toks[k + 1]):
+            return int(toks[k + 1])
+    return None
 
 
 def num(s):
@@ -311,15 +330,19 @@ class Tracker:
         digit plus data; a button click is "1" + its 0-based position, e.g.
         "12" = third button (seen in recordings). Used to learn which class
         was clicked on the class menu."""
+        cf = getattr(self, "cal_fight", None)
+        if cf is not None:
+            i = click_index(text)
+            with LOCK:
+                labels = list(STATE.get("buttons") or [])
+            if i is not None and i < len(labels):
+                cf["clicked"].append(labels[i])
         menu = self.class_menu
         if not menu:
             return
-        for ln in text.replace("\x00", "\n").split("\n"):
-            m = re.match(r"^\s*1([0-7])\s*$", ln)
-            if m:
-                i = int(m.group(1))
-                if i < len(menu) and menu[i]:
-                    self.class_pick = {menu[i]}
+        i = click_index(text)
+        if i is not None and i < len(menu) and menu[i]:
+            self.class_pick = {menu[i]}
 
     def _new_roll(self):
         p = self.p
@@ -564,10 +587,17 @@ class Tracker:
                 changed = True
 
             # "A Kobold hit you for 10 damage!"
+            if m and getattr(self, "cal_fight", None):
+                self.cal_fight["out"].append(dmg)
             if "hit you for" in low:
                 changed = True
+                mh = re.search(r"hit you for ([\d.]+) damage", low)
+                if mh and getattr(self, "cal_fight", None):
+                    self.cal_fight["in"].append(float(mh.group(1)))
 
             # luckout resolved
+            if "you blew it" in low and getattr(self, "cal_fight", None):
+                self.cal_fight["blew"] += 1
             if "you blew it" in low:
                 self.fs.luckout_spent = True
                 self.await_luck = False
@@ -592,6 +622,15 @@ class Tracker:
 
             if changed:
                 self.refresh_advice()
+
+        cf = getattr(self, "cal_fight", None)
+        if cf and CAL and ("you made it" in low or "you killed it" in low):
+            if CAL_MOD.Calibration.fight_counts(cf["clicked"], cf["blew"]):
+                CAL.record(cf["size"], cf["e"], cf["s"], cf["out"], cf["in"])
+            self.cal_fight = None
+        elif cf and ("you got away" in low or "you have been killed" in low
+                     or "wandered off" in low):
+            self.cal_fight = None
 
         if "you made it" in low or "you killed it" in low:
             # quest credit: only on an actual kill, and only for the right monster
@@ -631,6 +670,12 @@ class Tracker:
         d = MDB.scaled(name, size)
         if not d:
             return
+        # Correct the 4.03-table numbers with what this player's own fights
+        # showed for monsters of this size (calibrate.py).
+        er, sr = CAL.ratios(size) if CAL else (1.0, 1.0)
+        self.cal_fight = {"size": size, "e": d["energy"], "s": d["strength"],
+                          "out": [], "in": [], "clicked": [], "blew": 0}
+        d = dict(d, energy=d["energy"] * er, strength=d["strength"] * sr)
         m = Monster(name=d["name"], strength=d["strength"], brains=d["brains"],
                     speed=d["speed"], energy=d["energy"], shield=0.0,
                     experience=d["experience"], specials=tuple(d["specials"]))
@@ -639,6 +684,9 @@ class Tracker:
         self.fs = FightState.opening(self.p, m)
 
         warn = list(MDB.notes_for(d))
+        if (er, sr) != (1.0, 1.0):
+            warn.append(f"Size {size} numbers from your own fights: energy "
+                        f"x{er:.2f}, strength x{sr:.2f}.")
         if size > self.max_size_seen and self.max_size_seen > 0:
             warn.insert(0, f"Size {size} — bigger than anything you've fought this session.")
         self.max_size_seen = max(self.max_size_seen, size)
@@ -727,9 +775,12 @@ class Tracker:
             STATE["fight"] = None
 
     def _zone_key(self):
+        # Only the character's lasting traits. Speed and strength wobble
+        # after nearly every fight (fatigue, gold weight, poison); keying on
+        # them reran the ~5 s recalc after most fights, which lagged
+        # auto-play more and more over a long session.
         p = self.p
-        return (p.level, p.brains, p.strength, p.quickness, p.magiclvl,
-                p.max_energy, p.sword, p.shield)
+        return (p.level, p.brains, p.magiclvl, p.max_energy)
 
     def push_zone(self):
         """Keep the zone advice current.
@@ -758,7 +809,11 @@ class Tracker:
             return                      # don't burn CPU mid-fight
         if getattr(self, "_zone_busy", False):
             return                      # one at a time
+        last = getattr(self, "_zone_ran_at", 0.0)
+        if rows is not None and time.time() - last < ZONE_MIN_INTERVAL_S:
+            return                      # at most once every few minutes
         self._zone_busy = True
+        self._zone_ran_at = time.time()
         self._zone_after_fight = False
         key = self._zone_key()
         snap = (self.p, self.xy, key)
@@ -933,8 +988,12 @@ def handle(client):
     # game window by `replies` but still read by the tracker.
     send_lock = threading.Lock()
     replies = SS.ReplyFilter()
+    def note_sent(req):
+        if rec is not None:
+            rec.note("[auto stats] > " + req.decode("utf-8", "replace")
+                     .replace("\x00", "<NUL>"))
     sync = SS.StatsSync(t, server, send_lock, replies, STATE, LOCK,
-                        enabled=AUTO_STATS)
+                        enabled=AUTO_STATS, on_sent=note_sent)
     with LOCK:
         STATE["statsync_enabled"] = AUTO_STATS
     threading.Thread(target=sync.run, daemon=True).start()
@@ -974,6 +1033,26 @@ def parse_args(a):
         enable_recording(nxt)
 
 
+def init_calibration():
+    """Load calibration.json and (in the background) learn from every
+    recording, so advice is calibrated from the start."""
+    global CAL
+    if CAL is not None:
+        return CAL
+    CAL = CAL_MOD.Calibration(CAL_PATH)
+    folder = RECORDER.folder if RECORDER else os.path.join(HERE, "recordings")
+
+    def learn():
+        try:
+            CAL.sizes = {}
+            n = CAL.learn_recordings(folder, CAL_MOD._scaled_from_line)
+            print(f"  calibration: learned from {n} recorded fights")
+        except Exception as e:
+            print(f"  ! calibration failed: {e}", file=sys.stderr)
+    threading.Thread(target=learn, daemon=True).start()
+    return CAL
+
+
 def start(open_browser=True, background=False):
     """Start the dashboard + proxy.
 
@@ -986,6 +1065,7 @@ def start(open_browser=True, background=False):
     # request at a time. With the dashboard polling AND the overlay polling
     # (plus keep-alive holding connections open), requests queue up behind
     # each other and eventually just time out. This was why the UI went dead.
+    init_calibration()
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind((LISTEN_HOST, LISTEN_PORT))
