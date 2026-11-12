@@ -542,14 +542,12 @@ class ButtonOverlay:
         poison, fresh = p.get("poison"), p.get("stats_fresh")
         self._show_labels(labels)
         self._reset_cells()
-        if not fresh and waited < TREASURE_WAIT_S:
+        if not fresh and d.get("statsync_enabled") and waited < TREASURE_WAIT_S:
             self.hint.configure(text="Treasure: checking for poison\u2026", fg=INK)
             self.sub.configure(text="reading your stats after that fight")
             return True
         if poison is None:
-            ss = d.get("statsync") or {}
-            want, why = "no", ("poison unknown: playing it safe (stat fetches "
-                               f"sent {ss.get('sent', 0)}, read {ss.get('replies', 0)})")
+            want, why = "yes", "poison unknown, no sign of it"
         elif poison > 0:
             want, why = "no", f"poisoned ({poison:g})"
         else:
