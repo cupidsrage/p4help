@@ -670,6 +670,12 @@ def _score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
                          if losing and mana_fallback else None)
                     if n and n <= s.p_mana:
                         nxt, narg = "bolt", n
+                    elif (losing and mana_fallback and s.m_speed > 0
+                          and player.magiclvl >= ML_PARALYZE
+                          and s.p_mana >= MM_PARALYZE
+                          and not set(mon.specials) & SPELL_IMMUNE):
+                        # can't bolt it dead: hold it still for a few rounds
+                        nxt, narg = "paralyze", None
                     else:
                         nxt, narg = "melee", None
                 if apply_move(player, mon, s, nxt, narg):
@@ -769,12 +775,20 @@ def explain(player, mon, st, moves):
         return ("Buffing might now pays for itself — melee damage is linear in "
                 "might, and the bonus stacks and lasts the whole fight.")
     if mv == "paralyze":
-        return ("Paralyze sets its speed to -2 — it effectively stops acting. "
-                "Best mana you'll ever spend on something this dangerous.")
+        ch = min(1.0, 4000 * player.magiclvl / (st.m_experience + 6000 * player.magiclvl) + 0.1)
+        return (f"Paralyze ({ch*100:.0f}% to hold it): its speed drops to -2 and "
+                "climbs back 1 a round, so you get about 3 free rounds before it "
+                "can hit again. Skirmish wakes it up, so melee after.")
     if mv == "aon":
         ch = 3000 * player.magiclvl / (mon.experience + 10000 * player.magiclvl)
         return (f"All-or-Nothing: {ch*100:.0f}% instant kill for 1 mana. "
                 f"A miss doubles its strength and speed — but nothing else here wins.")
+    if mv == "haste":
+        return ("Haste raises your speed for the whole fight, so it wins "
+                "initiative less often and gets fewer hits on you.")
+    if mv == "forcefield":
+        return (f"Force Field soaks {20 * player.magiclvl:.0f} damage before "
+                "your energy takes any.")
     if mv == "evade":
         return (f"You lose this fight. Get out — {top['flee']*100:.0f}% to escape.")
     if mv == "melee":
@@ -788,6 +802,6 @@ def explain(player, mon, st, moves):
                 f"({st.p_energy:.0f} \u2192 ~{max(0, hp_after):.0f}). "
                 f"Degrades its strength as you go.")
     if mv == "skirmish":
-        return ("Skirmish only to slow it down for an escape — it does less "
-                "damage than melee and its speed isn't what's hurting you.")
+        return ("Skirmish wears its speed down, so it wins initiative less "
+                "often and gets fewer hits on you; it does less damage than melee.")
     return ""

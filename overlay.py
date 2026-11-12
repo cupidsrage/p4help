@@ -189,6 +189,7 @@ class Overlay:
             q.get("text"), q.get("done"), q.get("need"), d.get("rerolls"),
             round(p.get("energy", 0)), round(p.get("mana", 0)),
             p.get("brains"), p.get("magiclvl"),
+            tuple(p.get("notes") or ()),
         )
 
     def _render(self):
@@ -308,6 +309,8 @@ class Overlay:
             chips.append((f"+{st['strength_spell']:.0f} might", GREEN))
         if st.get("paralyzed"):
             chips.append(("PARALYZED", GREEN))
+        if f.get("treasure"):
+            chips.append((f"treasure {f['treasure']*100:.0f}%", GOLD))
         if chips:
             cf = tk.Frame(self.body, bg=BG)
             cf.pack(fill="x", pady=(0, 5))
@@ -443,6 +446,9 @@ class Overlay:
             tk.Label(c, text=str(v), bg=BG, fg=INK,
                      font=self.f_md).pack()
             tk.Label(c, text=k, bg=BG, fg=DIM, font=self.f_tiny).pack()
+        # reminders from the game's rules (gold weight, trove maps, ...)
+        for note in (p.get("notes") or [])[:3]:
+            self._row(self.body, "! " + note, fg=AMBER, font=self.f_tiny)
 
     def run(self):
         self.root.mainloop()

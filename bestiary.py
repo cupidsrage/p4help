@@ -33,6 +33,7 @@ HERE = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", 
 sys.path.insert(0, HERE)
 
 import calibrate as CAL_MOD                       # noqa: E402
+import rules as RU                                # noqa: E402
 import monsters as MDB                            # noqa: E402
 from combat import Player, Monster                # noqa: E402
 from planner import score_moves, FightState       # noqa: E402
@@ -121,7 +122,12 @@ def _run_one(args):
     # Same dice for every stat variant of this monster/size, so a difference
     # comes from the stat, not from luck ("common random numbers").
     random.seed(f"{name}|{size}")
-    return (name, size, bump, fight(p, m) if m else None)
+    r = fight(p, m) if m else None
+    if r is not None:
+        tt = MDB.MONSTERS[name][5]
+        r["treasure"] = round(RU.treasure_drop_chance(tt, size, "U" in m.specials), 2)
+        r["maps"] = round(RU.map_chance_per_kill(tt, size), 3)
+    return (name, size, bump, r)
 
 
 def build(stats, sizes, workers=None):
@@ -170,11 +176,15 @@ def write_html(data, path):
                 continue
             mv = r["move"] + (f" {r['arg']}" if r.get("arg") else "")
             tip = (f"win {r['win']*100:.0f}% · death {r['death']*100:.1f}% · "
-                   f"-{r['energy']} en · {r['mana']} mana")
+                   f"-{r['energy']} en · {r['mana']} mana · "
+                   f"treasure {r.get('treasure', 0)*100:.0f}%")
+            if r.get("maps"):
+                tip += f" · trove map {r['maps']*100:.0f}%"
             cells.append(f'<td style="background:{r["colour"]}" title="{html.escape(tip)}">'
                          f'<b>{html.escape(r["verdict"])}</b><br>{html.escape(mv)}'
                          f'<br><small>{r["death"]*100:.0f}% death</small></td>')
-        rows.append(f"<tr><th>{html.escape(name)}</th>{''.join(cells)}</tr>")
+        mark = " 🗺" if MDB.MONSTERS[name][5] == RU.MAP_TREASURE_TYPE else ""
+        rows.append(f"<tr><th>{html.escape(name)}{mark}</th>{''.join(cells)}</tr>")
     eff = "".join(f"<tr><td>{html.escape(e['stat'])}</td><td>{e['fights_made_safe']:+d}</td>"
                   f"<td>{e['death_cut']:+.2f}</td></tr>" for e in data["effects"])
     stat_line = " · ".join(f"{k} {st.get(k)}" for k in
@@ -190,7 +200,8 @@ small{{opacity:.85}} h2{{color:#d4b03a}} input{{margin:6px 0;padding:4px;width:2
 </style></head><body>
 <h2>Bestiary</h2>
 <p>Built {data['made']} from your stats: {html.escape(stat_line)} (full energy and mana).
-Hover a cell for win / death / energy / mana. Corrections from your own fights are
+Hover a cell for win / death / energy / mana / treasure chance. Monsters
+marked 🗺 drop trove maps. Corrections from your own fights are
 included where a size has enough of them.</p>
 <h3>What stats do what</h3>
 <p>Every fight re-simulated with one stat raised. "Fights made safe" = how many

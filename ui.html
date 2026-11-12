@@ -553,6 +553,19 @@ function drawTrove(t){
     h += '</div>';
   }
 
+  // where the next map comes from (treasure.c: scrolls, type-4 treasure)
+  if(t.cloaked){
+    h += `<div class="warn" style="margin-top:6px">You're cloaked: you can't find
+      the trove while cloaked. Uncloak before you step on it.</div>`;
+  }
+  if(t.maps_ok === false){
+    h += `<div class="warn" style="margin-top:6px">You no longer get maps: scrolls
+      only give them while your level is at most 100 minus your gems.</div>`;
+  } else if(t.map_monsters && t.map_monsters.length){
+    h += `<div class="muted" style="font-size:11px;margin-top:6px">Next map: kill
+      ${t.map_monsters.map(esc).join(', ')} (they drop scrolls; 1 in 6 is a map)</div>`;
+  }
+
   // small print: the individual scroll reading
   h += `<div class="muted" style="font-size:11px;margin-top:8px;
          padding-top:6px;border-top:1px solid var(--line)">

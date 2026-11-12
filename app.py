@@ -39,6 +39,7 @@ from combat import (Player, Monster, advise, aon_chance, luckout_chance,
 import monsters as MDB
 import quests as Q
 import trove as TR
+import rules as RU
 import zones as ZN
 import reroll as RR
 import statsync as SS
@@ -157,6 +158,11 @@ class Tracker:
         self.p = Player()
         self.name = ""
         self.gold = 0
+        self.gems = 0.0
+        self.amulets = None        # unknown until the server says
+        self.charms = None
+        self.cloaked = False
+        self.cls = ""              # class, from "Name the Fighter"
         self.location = ""
         self.pending = None
         self.awaiting_count = False
@@ -270,6 +276,14 @@ class Tracker:
             p.level = v
         elif hdr == GOLD:
             self.gold = v
+        elif hdr == GEMS:
+            self.gems = v
+        elif hdr == AMULETS:
+            self.amulets = v
+        elif hdr == CHARMS:
+            self.charms = v
+        elif hdr == CLOAK:
+            self.cloaked = (lines[0].strip().lower() == "yes") if lines else False
         elif hdr == NAME:
             name = lines[0].strip() if lines else ""
             if name and name != self.name:
@@ -409,8 +423,10 @@ class Tracker:
         m = re.search(r"energy\s*:\s*([\d.]+)\s*\(\s*([\d.]+)\s*\+\s*([\d.]+)\s*shield", low)
         if m:
             self.p.energy = float(m.group(1))
-            self.p.max_energy = float(m.group(2))
+            # "Energy: 1088 (477 + 836 shield)": the energy bar's max is
+            # 477 + 836, so keep max_energy as the total like packet 42 does
             self.p.shield = float(m.group(3))
+            self.p.max_energy = float(m.group(2)) + self.p.shield
         m = re.search(r"^\s*level\s*:\s*([\d.]+)", low)
         if m:
             self.p.level = float(m.group(1))
@@ -434,6 +450,16 @@ class Tracker:
         m = re.search(r"^\s*gold\s*:\s*([\d.]+)", low)
         if m:
             self.gold = float(m.group(1))
+        m = re.search(r"^\s*(gems|amulets|charms)\s*:\s*([\d.]+)", low)
+        if m:
+            setattr(self, m.group(1), float(m.group(2)))
+        m = re.search(r"^\s*cloaked\s*:\s*(yes|no)", low)
+        if m:
+            self.cloaked = m.group(1) == "yes"
+        m = re.match(r"^\s*\S.* the (magic-user|fighter|elf|dwarf|halfling|experimento)\s*$",
+                     low)
+        if m:
+            self.cls = m.group(1)
 
         # ---- quests (trading post) ----
         r = Q.parse_rerolls(txt)
@@ -764,6 +790,12 @@ class Tracker:
         self.max_size_seen = max(self.max_size_seen, size)
         if not self.have_magic:
             warn.insert(0, "Brains/Magic Level unknown — open Info → Stats.")
+        tr_type = MDB.MONSTERS[name][5]
+        if (self.trove is not None and tr_type == RU.MAP_TREASURE_TYPE
+                and RU.map_eligible(self.p.level, self.gems)):
+            pm = RU.map_chance_per_kill(tr_type, size)
+            warn.insert(0, f"Drops trove maps: ~{pm*100:.0f}% chance of a map "
+                           "if you kill it.")
 
         self.cur = {
             "name": d["name"], "size": size, "flock": flock,
@@ -771,6 +803,8 @@ class Tracker:
             "brains": d["brains"], "base_brains": MDB.MONSTERS[name][1],
             "experience": d["experience"], "speed": d["speed"],
             "warnings": warn,
+            "treasure": RU.treasure_drop_chance(
+                tr_type, size, unicorn="U" in d["specials"]),
             "luckout": luckout_chance(self.p, m),
             "aon": aon_chance(self.p, m),
             "bolt": bolt_plan(self.p, m),
@@ -914,6 +948,9 @@ class Tracker:
                 STATE["trove"] = None
                 return
             d = self.trove.to_dict(self.xy)
+            d["map_monsters"] = self.map_monsters()
+            d["maps_ok"] = RU.map_eligible(self.p.level, self.gems)
+            d["cloaked"] = self.cloaked
             if self.search:
                 d["search"] = self.search.to_dict(self.xy)
             est = self.solver.estimate()
@@ -943,7 +980,50 @@ class Tracker:
                 "poison": self.poison,
                 # stat sheet read since the last fight ended (poison is current)
                 "stats_fresh": self.stats_at > 0 and self.stats_at >= self.fight_end_at,
+                "gems": self.gems, "amulets": self.amulets, "charms": self.charms,
+                "cloaked": self.cloaked, "cls": self.cls,
+                "circle": self.circle(),
+                "notes": self.notes(),
             }
+
+    def circle(self):
+        return ZN.circle_of(*self.xy) if self.xy else None
+
+    def notes(self):
+        """Short reminders from the game's own rules, shown on the panel."""
+        p, out = self.p, []
+        loss = RU.gold_speed_loss(self.gold, self.gems, p.level, self.cls)
+        limit = RU.gold_limit(self.gems, p.level, self.cls)
+        if loss > 0:
+            out.append(f"Gold is slowing you: -{loss:.1f} speed. Bank or spend "
+                       f"down to {limit:,.0f} gold.")
+        elif self.gold and self.gold > 0.85 * limit:
+            out.append(f"Gold {self.gold:,.0f}: over {limit:,.0f} starts "
+                       "slowing you down.")
+        if self.trove is not None:
+            if not RU.map_eligible(p.level, self.gems):
+                out.append(f"No more trove maps: level {p.level:.0f} is over "
+                           f"100 - gems ({100 - self.gems:.0f}).")
+            else:
+                names = self.map_monsters()
+                if names:
+                    out.append("Trove maps drop from: " + ", ".join(names[:4])
+                               + (" ..." if len(names) > 4 else ""))
+            if self.cloaked and self.search is not None:
+                out.append("You can't find the trove while cloaked.")
+        return out
+
+    def map_monsters(self, circle=None):
+        """Monsters that can spawn here and drop scrolls (trove maps)."""
+        c = circle or self.circle()
+        if not c:
+            return []
+        seen = []
+        for i in ZN.monster_pool(c):
+            name = ZN.IDS[i]
+            if MDB.MONSTERS[name][5] == RU.MAP_TREASURE_TYPE and name not in seen:
+                seen.append(name)
+        return seen
 
 
 # ---------- web server ----------
