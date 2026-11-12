@@ -169,7 +169,6 @@ class Tracker:
         self.xy = None
         self.solver = TR.TroveSolver()
         self.search = None      # TroveSearch, once we have an estimate
-        self.search = None      # TroveSearch, once we have an estimate
         self.cur = None            # current monster dict
         self.cur_mon = None        # Monster object
         self.fs = None             # live FightState
@@ -291,8 +290,10 @@ class Tracker:
                     pass
                 self.location = f"{lines[2].strip()} ({lines[0].strip()},{lines[1].strip()})"
                 # tick off this square in the trove sweep
-                if self.search and self.xy:
-                    self.search.visit(*self.xy)
+                if self.xy:
+                    self.solver.visit(*self.xy)
+                    if self.search:
+                        self.search.visit(*self.xy)
                 self.push_trove()
                 self.push_zone()
         elif hdr == RING:
@@ -492,46 +493,52 @@ class Tracker:
                 STATE["session"]["quests"] += 1
                 STATE["session"]["quest_gold"] += gold
 
-        # ---- treasure trove scrolls ----
+        # ---- treasure trove maps ----
+        # Every map points at the same single trove from where it's read
+        # (treasure.c), so each one narrows down the same spot.
         if any(k in low for k in TR.SCROLL_MARKERS):
-            t = TR.parse_scroll(txt, origin=self.xy)
+            pos = self.xy
+            one = TR.ONE_SQUARE_RE.search(txt)
+            t = TR.parse_scroll(txt, origin=pos)
+            if one and pos:
+                t = TR.Trove(1, one.group(1).lower(), pos, txt.strip())
             if t:
                 if self.trove:
                     t.leg = self.trove.leg + 1
                 self.trove = t
-                # Feed the reading to the triangulator. The scroll's DIRECTION is
-                # exact but its DISTANCE is fudged +/-12.5% (treasure.c:1584), so
-                # a single scroll can't pinpoint it -- but several can.
-                pos = self.xy or t.origin
-                if pos:
-                    # avoid logging two readings at the exact same coordinates --
-                    # that adds no triangulation info. Only skip if identical.
-                    dup = any(abs(rx - pos[0]) < 1 and abs(ry - pos[1]) < 1
-                              for rx, ry, *_ in self.solver.readings)
-                    if not dup:
-                        self.solver.add(pos[0], pos[1], t.distance, t.direction)
-                    else:
-                        self.note("TROVE scroll read at the SAME spot as the last "
-                                  "one - move before reading to triangulate.")
-                    est = self.solver.estimate(step=12)
-                    if est:
-                        self.note(f"TROVE scroll {est['readings']}: "
-                                  f"{t.distance} sq {t.direction} -> best guess "
-                                  f"({est['x']}, {est['y']}) +/-{est['uncertainty']:.0f}")
-                        # start (or recenter) the on-foot sweep box
-                        rad = max(6, int(est["uncertainty"]))
-                        if self.search is None:
-                            self.search = TR.TroveSearch(est["x"], est["y"], rad)
-                            self.note(f"SEARCH BOX: {self.search.total_squares()} "
-                                      f"squares to sweep around "
-                                      f"({est['x']}, {est['y']})")
-                        else:
-                            self.search.recenter(est["x"], est["y"], rad)
+            if not pos:
+                self.note("TROVE map read but position unknown - move one "
+                          "square so the game reports your location.")
+            elif one:
+                self.solver.add_exact(pos[0], pos[1], one.group(1).lower())
+            elif t:
+                dup = any(abs(rx - pos[0]) < 1 and abs(ry - pos[1]) < 1
+                          for rx, ry, *_ in self.solver.readings)
+                if dup:
+                    self.note("TROVE map read at the SAME spot as the last one - "
+                              "it adds nothing. Read the next one somewhere else.")
                 else:
-                    self.note("TROVE scroll read but position unknown - "
-                              "move one square so the game reports your location, "
-                              "then it can triangulate.")
-                self.push_trove()
+                    self.solver.add(pos[0], pos[1], t.distance, t.direction)
+            if pos and t:
+                est = self.solver.estimate()
+                if est:
+                    self.note(f"TROVE map {est['readings']}: {t.distance} sq "
+                              f"{t.direction} -> {est['squares']:,} squares left, "
+                              f"middle ({est['x']}, {est['y']})")
+                    if est["squares"] <= TR.SWEEP_MAX:
+                        if self.search is None:
+                            self.search = TR.TroveSearch(self.solver.cands)
+                            self.note(f"SWEEP: {est['squares']:,} squares to walk")
+                        else:
+                            self.search.update(self.solver.cands)
+                elif self.solver.readings:
+                    self.note("TROVE maps disagree (was the trove dug up and "
+                              "re-hidden?) - starting over from this map.")
+                    self.solver = TR.TroveSolver()
+                    self.search = None
+                    if not one:
+                        self.solver.add(pos[0], pos[1], t.distance, t.direction)
+            self.push_trove()
 
         if any(k in low for k in TR.FOUND_MARKERS):
             if self.trove:
@@ -909,9 +916,9 @@ class Tracker:
             d = self.trove.to_dict(self.xy)
             if self.search:
                 d["search"] = self.search.to_dict(self.xy)
-            est = self.solver.estimate(step=12)
+            est = self.solver.estimate()
             if est:
-                d["solved"] = est
+                est = d["solved"] = dict(est)
                 if self.xy:
                     dx = est["x"] - self.xy[0]
                     dy = est["y"] - self.xy[1]

@@ -460,16 +460,17 @@ function drawTrove(t){
       <div class="big g" style="font-size:20px">${s.heading||'?'} &times; ${(s.steps||0).toLocaleString()}</div>
       <div class="muted" style="font-size:13px;margin-top:2px">
         trove is near <b>${s.x}, ${s.y}</b><br>
-        about <b>${(s.steps||dist).toLocaleString()}</b> squares away · give or take ${Math.round(s.uncertainty)}
+        about <b>${(s.steps||dist).toLocaleString()}</b> squares away ·
+        <b>${(s.squares||0).toLocaleString()}</b> squares it could still be on
       </div>`;
     if(s.readings < 2){
       h += `<div class="warn" style="font-size:11px;margin-top:5px">
-        Only 1 reading. The distance the scroll gives is deliberately off by up to
-        ±12.5%, so this is rough. Walk toward it, read the next scroll from a NEW
-        spot, and this locks in.</div>`;
+        Only 1 map. Its distance is off by up to ±12.5% and its direction is a
+        45° wedge. Every map points at the same trove, so walk toward it and read
+        the next one from a NEW spot: each map cuts the area hard.</div>`;
     } else {
       h += `<div class="muted" style="font-size:11px;margin-top:5px">
-        Head that way and read the next scroll to tighten it further.</div>`;
+        Head that way and read the next map to narrow it further.</div>`;
     }
   } else if(t.remaining){
     // no triangulation yet: just this scroll's arrow
@@ -501,8 +502,8 @@ function drawTrove(t){
     if(big){
       h += `<div class="warn" style="margin:6px 0">
         <b>${s.total.toLocaleString()} squares</b> — walk toward the guess and read
-        the next scroll instead. The error shrinks fast as you close in
-        (scroll 3 is usually ~500 squares, scroll 4 under 50).</div>`;
+        the next map instead. Typically ~4,600 squares are left after 3 maps
+        and under 1,000 after 4.</div>`;
     } else {
       h += `<div class="verdict v-go" style="padding:6px 8px;margin:6px 0">
         <div class="v-t" style="font-size:13px">Small enough — sweep it</div>
@@ -523,8 +524,9 @@ function drawTrove(t){
         <div class="v-s">next unsearched square: ${s.next.x}, ${s.next.y}</div>
       </div>`;
     } else {
-      h += `<div class="warn">Whole box swept and no trove. The estimate must be
-        off — read another scroll to re-triangulate.</div>`;
+      h += `<div class="warn">Every possible square walked and no trove. Someone
+        else probably dug it up (it moves when found) — read a new map.
+        (You can't find it while cloaked.)</div>`;
     }
 
     // the grid
@@ -532,8 +534,9 @@ function drawTrove(t){
       h += '<div style="margin-top:6px;line-height:0;font-size:0">';
       for(const row of s.grid){
         for(const c of row){
-          const bg = c.here ? 'var(--a)' : (c.walked ? '#2f4a28' : '#2a2419');
-          const bd = c.here ? 'var(--a)' : (c.walked ? '#3f6136' : '#3a3226');
+          const off = !c.possible && !c.here;
+          const bg = c.here ? 'var(--a)' : off ? 'transparent' : (c.walked ? '#2f4a28' : '#2a2419');
+          const bd = c.here ? 'var(--a)' : off ? 'transparent' : (c.walked ? '#3f6136' : '#3a3226');
           h += `<span title="${c.x},${c.y}" style="display:inline-block;
                  width:9px;height:9px;margin:1px;background:${bg};
                  border:1px solid ${bd};border-radius:1px"></span>`;
