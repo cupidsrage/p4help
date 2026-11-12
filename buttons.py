@@ -651,6 +651,11 @@ class ButtonOverlay:
     def _update(self):
         d = self.data
         f = d.get("fight")
+        # Main menu on screen: whatever fight advice is left over is stale.
+        labels = set(self._button_texts())
+        if (f and "melee" not in labels and "rest" in labels
+                and ("move to" in labels or "hunt" in labels)):
+            f = None
 
         # HIGHEST PRIORITY: if the game is showing a "More" prompt, nothing else
         # works until you clear it. Button 1 == "More". Tell the player to press

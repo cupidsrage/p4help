@@ -273,6 +273,13 @@ class Tracker:
                 STATE["buttons"] = labels
                 STATE["prompt"] = qs[-1] if qs else ""
             self._creation_buttons(labels)
+            # Back on the main menu = any fight is over, however it ended.
+            # Some endings print nothing we recognise (a Kobold stealing gold
+            # and running off), which left a stale fight that froze auto-play.
+            low = {b.lower() for b in labels}
+            if (self.cur is not None and "melee" not in low and "rest" in low
+                    and ("move to" in low or "hunt" in low)):
+                self.end_fight()
         elif hdr == WRITE_LINE:
             self._text(lines[0] if lines else "")
         elif hdr == PLAYER_INFO:
