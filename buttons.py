@@ -67,6 +67,10 @@ TREASURE_WAIT_S = 8.0
 # Monsters to Evade every round no matter what the advisor's odds say.
 # Matched case-insensitively against the monster's name ("A Moron").
 ALWAYS_EVADE = ["Moron"]
+# Always fled no matter what the settings say: hitting a Shrieker without
+# killing it (or resting) makes it call monster #70-99 -- Balrogs, Titans,
+# Dragons (fight.c) -- and evading a Shrieker never fails.
+MUST_EVADE = ["Shrieker"]
 # Survival rules on top of the advisor's pick (auto-play only):
 SAFE_MAX_DEATH = 0.02     # advisor's move kills you more often than this -> safest move
 GROUP_RESERVE = 0.50      # in a group, don't let a fight leave you below this of max energy
@@ -161,6 +165,8 @@ class ButtonOverlay:
         self.always_evade = [str(n).strip().lower() for n in
                              (ALWAYS_EVADE if always_evade is None else always_evade)
                              if str(n).strip()]
+        self.always_evade += [n.lower() for n in MUST_EVADE
+                              if n.lower() not in self.always_evade]
         # resting after fights
         self._rest_last_e = None     # best energy reached while resting
         self._rest_stalls = 0        # rests in a row that didn't raise energy
