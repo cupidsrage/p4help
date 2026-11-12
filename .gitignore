@@ -6,3 +6,5 @@ __pycache__/
 recordings/
 launcher.log
 calibration.json
+bestiary.html
+bestiary.json

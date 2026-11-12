@@ -560,6 +560,7 @@ class Launcher:
         self.auto_btn.configure(font=self.f_bold)
         self.rec_btn = btn("", self.toggle_record)
         btn("Recordings", self.open_recordings)
+        btn("Bestiary", self.open_bestiary)
 
         self.status = tk.Label(bar, text="", bg=BAR_BG, fg=DIM, font=self.f_sm,
                                anchor="e")
@@ -684,6 +685,23 @@ class Launcher:
         on = bool(self.recorder and self.cfg["record"])
         self.rec_btn.configure(text="\u25cf Recording" if on else "Record: OFF",
                                fg=RED if on else INK)
+
+    def open_bestiary(self):
+        """Simulate fights against every monster with the live stats
+        (bestiary.py) in a separate process, so it doesn't lag the game;
+        it opens bestiary.html in the browser when done (~30 s)."""
+        script = os.path.join(HOME, "bestiary.py")
+        if FROZEN or not os.path.exists(script):
+            messagebox.showinfo("Bestiary", "Run  python bestiary.py  from the "
+                                "p4help folder while the launcher is running.")
+            return
+        p = proxy.STATE.get("player") or {}
+        if not p.get("strength"):
+            messagebox.showinfo("Bestiary", "Log in first, so your stats are known.")
+            return
+        flags = 0x08000000 if IS_WIN else 0     # no console window
+        subprocess.Popen([sys.executable, script], cwd=HOME, creationflags=flags)
+        self.set_status("bestiary: simulating every monster (about 30 s)...", AMBER)
 
     def open_recordings(self):
         folder = os.path.join(HOME, "recordings")
