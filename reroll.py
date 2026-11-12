@@ -86,9 +86,26 @@ def class_name(label):
     return None
 
 
-def fitting_classes(stats):
+def nearest_classes(stats, ranges=None):
+    """The class(es) whose ranges the roll misses by the least, measured as
+    how far outside each range a value is, in units of that range's width."""
+    ranges = ranges or RANGES
+    def miss(rng):
+        total = 0.0
+        for s, (lo, hi) in rng.items():
+            v = stats.get(s)
+            if v is None:
+                continue
+            width = max(1.0, hi - lo + 1)
+            total += max(0.0, lo - v, v - hi) / width
+        return total
+    best = min(miss(r) for r in ranges.values())
+    return {c for c, r in ranges.items() if miss(r) == best}
+
+
+def fitting_classes(stats, ranges=None):
     """Every class whose ranges contain all of the rolled values."""
-    return {c for c, rng in RANGES.items()
+    return {c for c, rng in (ranges or RANGES).items()
             if all(stats.get(s) is not None and lo <= stats[s] <= hi
                    for s, (lo, hi) in rng.items())}
 
@@ -110,6 +127,10 @@ class RollJudge:
         self.hard_stop = hard_stop
         self.require_max = tuple(s for s in (require_max or ()) if s in STATS)
         self._bar = {}           # class -> threshold score
+        # The stats page's ranges are close but not exact (a Fighter rolled
+        # strength 24 against a listed 25-50), so keep our own copy and widen
+        # a class's range whenever a real roll goes past it.
+        self.ranges = {c: dict(r) for c, r in RANGES.items()}
         self.rolls = 0           # rolls seen for the current character
         self.cls = None
         self.cands = set(RANGES)  # classes consistent with every roll so far
@@ -118,7 +139,7 @@ class RollJudge:
         self.recent = []         # last few rolls, to spot fixed-stat classes
 
     def score(self, stats, cls):
-        rng, w = RANGES[cls], self.weights[cls]
+        rng, w = self.ranges[cls], self.weights[cls]
         num = den = 0.0
         for s, (lo, hi) in rng.items():
             if hi <= lo or not w.get(s):
@@ -128,11 +149,25 @@ class RollJudge:
             den += w[s]
         return num / den if den else 1.0
 
+    def _learn(self, cls, stats):
+        """Widen cls's ranges to include this real roll."""
+        rng, changed = self.ranges[cls], False
+        for s, (lo, hi) in list(rng.items()):
+            v = stats.get(s)
+            if v is None:
+                continue
+            v = int(v)
+            if v < lo or v > hi:
+                rng[s] = (min(lo, v), max(hi, v))
+                changed = True
+        if changed:
+            self._bar.pop(cls, None)   # bar depends on the ranges
+
     def missing_max(self, stats, cls):
         """Required stats that aren't at the class maximum, as text."""
         out = []
         for s in self.require_max:
-            hi = RANGES[cls][s][1]
+            hi = self.ranges[cls][s][1]
             if stats.get(s) is None or stats[s] < hi:
                 out.append(f"{s} {stats.get(s):g} < max {hi}"
                            if stats.get(s) is not None else f"{s} unknown")
@@ -143,7 +178,7 @@ class RollJudge:
         overall about 1 roll in target_rolls is kept."""
         if cls not in self._bar:
             r = random.Random(seed)
-            rng = RANGES[cls]
+            rng = self.ranges[cls]
             p_max = 1.0
             for s in self.require_max:
                 lo, hi = rng[s]
@@ -177,10 +212,17 @@ class RollJudge:
         self.recent = (self.recent + [tuple(stats.get(k) for k in STATS)])[-3:]
         # Ranges overlap between classes, but every roll of one character
         # comes from the same class: narrow the candidates roll by roll.
-        fits = fitting_classes(stats)
+        fits = fitting_classes(stats, self.ranges)
         picked = {class_name(c) or c for c in (roll.get("class_options") or [])}
+        picked &= set(self.ranges)
         if picked and (picked & fits):
             fits = picked & fits        # what the player clicked, if it fits
+        elif not fits:
+            # Fits no class exactly (the page's ranges are a bit off): trust
+            # the class the player clicked, else the candidates we already
+            # had, else the nearest class.
+            fits = picked or (self.cands if len(self.cands) < len(self.ranges)
+                              else nearest_classes(stats, self.ranges))
         self.cands = (self.cands & fits) or fits
         if (len(self.recent) == 3 and len(set(self.recent)) == 1
                 and "Experimento" in self.cands):
@@ -188,6 +230,8 @@ class RollJudge:
         cls = roll.get("class") or (next(iter(self.cands))
                                     if len(self.cands) == 1 else None)
         self.cls = cls
+        if cls in self.ranges:
+            self._learn(cls, stats)
 
         if cls is None and self.cands and self.rolls < self.hard_stop:
             out = {"action": "reroll", "class": None, "score": None,
@@ -198,7 +242,7 @@ class RollJudge:
             out = {"action": None, "class": None, "score": None, "need": None,
                    "rolls": self.rolls,
                    "why": "these stats don't match any class on the stats page"}
-        elif all(lo == hi for lo, hi in RANGES[cls].values()):
+        elif all(lo == hi for lo, hi in self.ranges[cls].values()):
             out = {"action": "keep", "class": cls, "score": 1.0, "need": 1.0,
                    "rolls": self.rolls, "why": f"{cls} stats never change"}
         else:
