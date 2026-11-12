@@ -42,6 +42,7 @@ from statsync import is_treasure
 import rules as RU
 
 POLL_URL = "http://127.0.0.1:8420/state"
+REST_TOPUP = 0.25      # skip the last rest if less than this much of one is missing
 POLL_MS = 150     # how often to read the proxy's state (local, cheap)
 PAINT_MS = 100
 AUTO_PRESS = (
@@ -681,6 +682,14 @@ class ButtonOverlay:
         # and poison takes a fixed amount back.
         target, net, need = RU.rest_target(
             e, mx, p.get("shield") or 0, p.get("level") or 0, poison, p.get("cls"))
+        # Every rest is a turn, and every 750 turns cost stats for good: don't
+        # spend one topping up a sliver (less than REST_TOPUP of a rest).
+        if need and net > 0 and target - e < REST_TOPUP * net:
+            self._cfg(self.hint, text=f"Energy {e:g}/{mx:g}: close enough to full",
+                      fg=GREEN_HI)
+            self._cfg(self.sub, text=f"a rest would mostly be wasted ({target - e:.0f} "
+                                     f"missing, a rest gives {net:.0f}); saving the turn")
+            return False
         if poison > 0 and need == 0:
             self._cfg(self.hint, text=f"Energy {e:g}/{mx:g}: rested as far as poison allows",
                       fg=AMBER)

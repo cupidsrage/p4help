@@ -203,7 +203,7 @@
           <table id="zonetbl">
             <thead><tr>
               <th>Circle</th><th>Zone</th><th>Size</th>
-              <th>Lethal</th><th>Survive 20</th><th>Exp/fight</th><th></th>
+              <th>Lethal</th><th>Survive 20</th><th>Exp/turn</th><th></th>
             </tr></thead>
             <tbody></tbody>
           </table>
@@ -395,7 +395,7 @@ function drawHunt(){
   if(cur && b && cur.circle === b.circle){
     h = `<div class="verdict v-go">
       <div class="v-t">Stay here — circle ${cur.circle}</div>
-      <div class="v-s">${esc(cur.zone)} · ~${cur.exp_per_fight.toFixed(0)} exp/fight ·
+      <div class="v-s">${esc(cur.zone)} · ~${(cur.exp_per_turn||0).toFixed(0)} exp/turn ·
         <b>${surv(cur).toFixed(0)}% chance to survive 20 fights</b></div></div>`;
   } else if(b){
     const out = cur && b.circle > cur.circle;
@@ -403,9 +403,9 @@ function drawHunt(){
       <div class="v-t">Move ${out?'out':'back in'} — to circle ${b.circle}</div>
       <div class="v-s">
         ${esc(b.zone)} · ~${b.distance.toFixed(0)} from origin<br>
-        ~${b.exp_per_fight.toFixed(0)} exp/fight ·
+        ~${(b.exp_per_turn||0).toFixed(0)} exp/turn ·
         <b>${surv(b).toFixed(0)}% chance to survive 20 fights</b>
-        ${cur ? `<br><span class="muted">(circle ${cur.circle}: ~${cur.exp_per_fight.toFixed(0)} exp,
+        ${cur ? `<br><span class="muted">(circle ${cur.circle}: ~${(cur.exp_per_turn||0).toFixed(0)} exp/turn,
           ${surv(cur).toFixed(0)}% survival)</span>` : ''}
       </div></div>`;
   }
@@ -419,7 +419,8 @@ function drawHunt(){
     <b>"Survive 20"</b> is your chance of getting through a 20-fight session alive.
     Death is absorbing — one bad monster ends the run — so a zone that's "only"
     13% lethal per fight leaves you a <b>6%</b> chance of surviving a session.
-    Exp/fight is <i>expected</i> exp: you don't bank experience from a fight you die in.</div>`;
+    Exp/turn is <i>expected</i> exp per turn, counting the rests to heal: every
+    turn ages you, and every 750 turns costs stats permanently.</div>`;
   $('huntbest').innerHTML = h;
 
   const tb = document.querySelector('#zonetbl tbody');
@@ -437,7 +438,7 @@ function drawHunt(){
       <td class="d">${r.size}</td>
       <td class="${sc}">${(r.lethal_frac*100).toFixed(0)}%</td>
       <td class="${sc}"><b>${sv.toFixed(0)}%</b></td>
-      <td class="d">${r.exp_per_fight.toFixed(0)}</td>
+      <td class="d">${(r.exp_per_turn||0).toFixed(0)}</td>
       <td>${tag}</td>
     </tr>`;
   }).join('');

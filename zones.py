@@ -179,7 +179,21 @@ def evaluate_circle(player, circle, sample=None):
     # ---- score ----
     # Expected exp banked over a session, given you might not finish it.
     # Dying is catastrophic: it costs a life and everything you were carrying.
-    score = exp_per_fight * SESSION * p_survive_session
+    # ---- EXPERIENCE PER TURN ----
+    # Every turn ages you, and every 750 age costs stats for good, so what
+    # matters is experience per TURN, not per fight. A fight costs about two
+    # turns (the Hunt and the fight), plus the rests to heal what it took.
+    # danger = d means expected damage / your energy = d / (1 - d).
+    import rules as RU
+    gain = max(1.0, RU.rest_gain(player.max_energy, player.level))
+    turns = 0.0
+    for dg in dangers:
+        dmg = min(dg, 0.95) / (1 - min(dg, 0.95)) * max(1.0, player.energy)
+        turns += 2.0 + dmg / gain
+    turns_per_fight = turns / len(dangers)
+    exp_per_turn = exp_per_fight / turns_per_fight
+
+    score = exp_per_turn * SESSION * p_survive_session
 
     deadly.sort(key=lambda t: -t[1])
 
@@ -191,6 +205,8 @@ def evaluate_circle(player, circle, sample=None):
         "avg_danger": avg_danger,
         "avg_exp": avg_exp,
         "exp_per_fight": exp_per_fight,
+        "exp_per_turn": exp_per_turn,
+        "turns_per_fight": turns_per_fight,
         "lethal_frac": lethal_frac,
         "p_survive_session": p_survive_session,
         "score": score,

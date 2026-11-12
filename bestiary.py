@@ -70,6 +70,8 @@ def player_from(stats):
         if stats.get(k) is not None:
             setattr(p, k, float(stats[k]))
     p.ring = bool(stats.get("ring"))
+    p.blessing = bool(stats.get("blessing"))
+    p.sin = float(stats.get("sin") or 0.0)
     p.max_energy = float(stats.get("max_energy") or stats.get("energy") or 100)
     p.energy = p.max_energy                       # rested
     return p

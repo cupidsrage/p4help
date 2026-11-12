@@ -25,6 +25,24 @@ DEFAULT_CLASS = (14.0, 150.0)          # unknown class: assume the lowest tote
 
 MAP_TREASURE_TYPE = 4                  # scrolls (and so trove maps) come from these
 
+# data/charstats: what each level adds (quickness, strength, mana, energy,
+# brains, magic level). Note Fighters, Magic-Users, ... get NO speed.
+LEVEL_GAINS = {
+    "magic-user":  (0.0, 1.0, 80.0, 20.0, 4.5, 3.0),
+    "fighter":     (0.0, 5.0, 35.0, 25.0, 2.0, 1.5),
+    "elf":         (0.0, 2.0, 65.0, 15.0, 4.0, 2.5),
+    "dwarf":       (0.0, 4.0, 50.0, 35.0, 3.0, 2.0),
+    "halfling":    (0.0, 3.0, 20.0, 30.0, 6.0, 1.0),
+    "experimento": (0.0, 1.0, 20.0, 15.0, 2.0, 1.0),
+}
+
+N_AGE = 750            # every 750 age: permanent stat loss (Do_degenerate)
+DEGENERATE = {         # what one degeneration multiplies by
+    "speed": 0.975, "max energy": 0.97, "strength": 0.97, "magic level": 0.97,
+    "brains": 0.95, "shield": 0.93, "sword": 0.93, "quicksilver": 0.93,
+}
+HUNT_SIN = 0.001       # every Hunt adds this much sin (main.c)
+
 
 def class_stats(cls):
     return CLASSES.get((cls or "").strip().lower(), DEFAULT_CLASS)
@@ -125,3 +143,67 @@ def map_chance_per_kill(treasure_type, size, circle=1):
     if treasure_type != MAP_TREASURE_TYPE:
         return 0.0
     return treasure_drop_chance(treasure_type, size) * 0.65 / 6.0
+
+
+# ---------------------------------------------------------------- aging
+def turns_to_degeneration(age, degenerated):
+    """Turns until the next permanent stat loss. Age goes up 1 every turn
+    (each move, rest, fight, treasure screen...); the server degenerates you
+    when age / 750 (whole number) passes your Degenerated count."""
+    if age is None or degenerated is None:
+        return None
+    return max(0, int(N_AGE * (degenerated + 1) - age))
+
+
+# ---------------------------------------------------------------- levels
+def level_of(experience):
+    """stats.c: level = floor((exp / 1000) ^ 0.4748) (higher formula past
+    11 million experience)."""
+    if experience < 1.1e7:
+        return math.floor((experience / 1000.0) ** 0.4748)
+    return math.floor((experience / 1250.0) ** 0.4865)
+
+
+def exp_for_level(level):
+    """Experience needed to reach `level`."""
+    e = 1000.0 * level ** (1 / 0.4748)
+    if e >= 1.1e7:
+        e = 1250.0 * level ** (1 / 0.4865)
+    e = math.ceil(e)
+    while level_of(e) < level:          # float rounding
+        e += 1
+    return e
+
+
+def level_gains(cls):
+    g = LEVEL_GAINS.get((cls or "").lower())
+    if not g:
+        return None
+    return dict(zip(("speed", "strength", "mana", "energy", "brains",
+                     "magic level"), g))
+
+
+# ---------------------------------------------------------------- cloak
+def cloak_drain(circle, level, cls=None):
+    """Mana a cloak costs per turn (stats.c Do_age)."""
+    max_mana = {"magic-user": 120.0, "fighter": 90.0, "elf": 110.0,
+                "dwarf": 100.0, "halfling": 80.0, "experimento": 100.0
+                }.get((cls or "").lower(), 100.0)
+    c = circle or 1
+    if c in (27, 28):
+        return math.floor(.02 * (1000 + level * max_mana))
+    if 24 < c < 31:
+        return math.floor(.01 * (1000 + level * max_mana))
+    if 19 < c < 36:
+        return math.floor(.005 * (1000 + level * max_mana))
+    return c
+
+
+# ---------------------------------------------------------------- blessing
+def blessing_rolls(sin):
+    """With a blessing, the monster must win this many initiative rolls in a
+    row to take the first hit away from you (fight.c). Sinless: you always
+    hit first."""
+    if not sin or sin <= 0:
+        return None                     # always first
+    return max(0, 6 - math.floor((sin + 1.0) / 1.25))

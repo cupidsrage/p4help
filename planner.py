@@ -155,11 +155,22 @@ def _monster_turns(player, mon, st, after_action=True):
     if after_action:
         st.ticks += 1                       # the pass you just acted in
     no_init = bool(set(mon.specials) & NO_INITIATIVE)
+    # A blessing gives you the first hit. With any sin the monster can take
+    # it back by winning several initiative rolls in a row (fight.c).
+    firsthit = not after_action and getattr(player, "blessing", False)
+    sin = getattr(player, "sin", 0.0) or 0.0
     for _ in range(400):
         if st.p_energy <= 0:
             return
         _wake(st)
         q = quickness_of(player, st)
+        if firsthit and sin > 0:
+            k = 6 - math.floor((sin + 1.0) / 1.25)
+            if (all(random.random() * st.m_speed > random.random() * q
+                    for _ in range(max(0, k))) and q > 0):
+                firsthit = False
+        if firsthit:
+            return                          # blessed: you go first
         if q <= 0 and st.m_speed > 0 and not no_init:
             st.p_energy = 0.0               # speed 0: it never stops hitting
             return
