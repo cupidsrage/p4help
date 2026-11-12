@@ -40,7 +40,8 @@ def make_monster(name, size):
     d = MDB.scaled(name, size)
     return Monster(name=d["name"], strength=d["strength"], brains=d["brains"],
                    speed=d["speed"], energy=d["energy"], shield=0.0,
-                   experience=d["experience"], specials=tuple(d["specials"]))
+                   experience=d["experience"], specials=tuple(d["specials"]),
+                    size=d["size"], treasure=d["treasure"])
 
 
 def play_one_fight(player, mon, decide_trials=300, max_rounds=150):
@@ -48,48 +49,35 @@ def play_one_fight(player, mon, decide_trials=300, max_rounds=150):
     Play a single fight, letting the planner choose every move from live state.
     Returns an outcome dict.
     """
+    from planner import _outcome
     st = FightState.opening(player, mon)
     _monster_turns(player, mon, st, after_action=False)   # its opening hits
     moves_taken = []
 
-    while st.rounds < max_rounds and st.p_energy > 0:
+    def done(result):
+        return {"result": result, "rounds": st.rounds,
+                "energy_lost": player.energy - max(0, st.p_energy),
+                "mana_spent": player.mana - st.p_mana, "moves": moves_taken}
+
+    out = _outcome(st)
+    while out is None and st.rounds < max_rounds:
         ranked = score_moves(player, mon, st, trials=decide_trials)
         if not ranked:
             break
         choice = ranked[0]
         mv, arg = choice["move"], choice["arg"]
         moves_taken.append(mv)
-
         if mv == "evade":
             st.rounds += 1
             if try_evade(player, mon, st):
-                return {"result": "fled", "rounds": st.rounds,
-                        "energy_lost": player.energy - st.p_energy,
-                        "mana_spent": player.mana - st.p_mana,
-                        "moves": moves_taken}
-            _monster_turns(player, mon, st)
+                return done("fled")
         else:
-            dead = apply_move(player, mon, st, mv, arg)
-            if dead:
-                return {"result": "win", "rounds": st.rounds,
-                        "energy_lost": player.energy - st.p_energy,
-                        "mana_spent": player.mana - st.p_mana,
-                        "moves": moves_taken}
+            apply_move(player, mon, st, mv, arg)
+        out = _outcome(st)
+        if out is None:
             _monster_turns(player, mon, st)
-
-        if st.p_energy <= 0:
-            return {"result": "death", "rounds": st.rounds,
-                    "energy_lost": player.energy,
-                    "mana_spent": player.mana - st.p_mana,
-                    "moves": moves_taken}
-
-    if st.p_energy <= 0:
-        return {"result": "death", "rounds": st.rounds,
-                "energy_lost": player.energy,
-                "mana_spent": player.mana - st.p_mana, "moves": moves_taken}
-    return {"result": "timeout", "rounds": st.rounds,
-            "energy_lost": player.energy - max(0, st.p_energy),
-            "mana_spent": player.mana - st.p_mana, "moves": moves_taken}
+            out = _outcome(st)
+    return done({"win": "win", "death": "death", "gone": "fled"}.get(out, "timeout"))
 
 
 def run(player, circle, n_fights, decide_trials, rest_between=True):

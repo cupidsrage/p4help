@@ -175,6 +175,8 @@ class Tracker:
         self._shop_key = None
         self._shop = None
         self.quicksilver = 0.0
+        self.blind = False
+        self.holywater = 0.0
         self.location = ""
         self.pending = None
         self.awaiting_count = False
@@ -294,6 +296,8 @@ class Tracker:
             self.amulets = v
         elif hdr == CHARMS:
             self.charms = v
+        elif hdr == VIRGIN:
+            self.virgin = (lines[0].strip().lower() == "yes") if lines else False
         elif hdr == QUICKSILVER:
             self.quicksilver = v
         elif hdr == BLESSING:
@@ -478,6 +482,14 @@ class Tracker:
         m = re.search(r"^\s*gold\s*:\s*([\d.]+)", low)
         if m:
             self.gold = float(m.group(1))
+        m = re.search(r"^\s*virgin\s*:\s*(yes|no)", low)
+        if m:
+            self.virgin = m.group(1) == "yes"
+        m = re.search(r"^\s*holy water\s*:\s*([\d.]+)", low)
+        if m:
+            self.holywater = float(m.group(1))
+        if "your holy water killed it" in low:
+            self.holywater = max(0.0, self.holywater - 1)
         m = re.search(r"^\s*(gems|amulets|charms)\s*:\s*([\d.]+)", low)
         if m:
             setattr(self, m.group(1), float(m.group(2)))
@@ -496,6 +508,14 @@ class Tracker:
         m = re.search(r"^\s*blessing\s*:\s*(yes|no)", low)
         if m:
             self.p.blessing = m.group(1) == "yes"
+        if ("blinded you" in low or "world goes black" in low
+                or re.match(r"^\s*blind\s*:\s*yes", low)):
+            if not self.blind:
+                self.note("BLIND: monsters now show as 'A monster'.")
+            self.blind = True
+        if ("regained your sight" in low or "veil of darkness lifts" in low
+                or "athelas" in low or re.match(r"^\s*blind\s*:\s*no", low)):
+            self.blind = False
         if "changes into the form of a mimic" in low:
             self.note("It was a Mimic all along.")
         if "smurf berries" in low:
@@ -727,6 +747,9 @@ class Tracker:
                     # with the damage you'd dealt by then (melee wears it down)
                     cf["in"].append((float(mh.group(1)), sum(cf["out"])))
 
+            if "is still after you" in low and self.cur is not None:
+                self.cur["evade_fails"] = self.cur.get("evade_fails", 0) + 1
+
             # luckout resolved
             if "you blew it" in low and getattr(self, "cal_fight", None):
                 self.cal_fight["blew"] += 1
@@ -818,6 +841,21 @@ class Tracker:
         return fs.m_speed != old
 
     # ---------- fight lifecycle ----------
+    CLASS_IDS = {"magic-user": 0, "fighter": 1, "elf": 2, "dwarf": 3,
+                 "halfling": 4, "experimento": 5}
+
+    def sync_player(self):
+        """Copy what monster specials take or use onto the Player the
+        simulations run with."""
+        p = self.p
+        p.holywater, p.gold, p.gems = self.holywater, self.gold or 0, self.gems or 0
+        p.charms = self.charms or 0
+        p.amulets = self.amulets or 0
+        p.quicksilver, p.blind = self.quicksilver, self.blind
+        p.virgin = bool(getattr(self, "virgin", False))
+        p.experience = self.experience or 0
+        p.ptype = self.CLASS_IDS.get(self.cls, 1)
+
     def mimic_suspect(self, name):
         """A plain encounter with a monster that can't spawn in this circle
         can only be a Mimic: it takes the name of any of the 100 monsters
@@ -838,7 +876,8 @@ class Tracker:
         d = MDB.scaled("A Mimic", size)
         return Monster(name="A Mimic", strength=d["strength"], brains=d["brains"],
                        speed=d["speed"], energy=d["energy"], shield=0.0,
-                       experience=d["experience"], specials=("Mi",))
+                       experience=d["experience"], specials=("Mi", "SM:MIMIC"),
+                       size=size, treasure=d["treasure"])
 
     def worth_it(self, m, moves):
         """Is this monster worth the age? A fight is one turn however long it
@@ -862,7 +901,7 @@ class Tracker:
         if not rate or not fight or not ev:
             return out
         gain = RU.rest_gain(self.p.max_energy, self.p.level, self.cls)
-        rests = fight["energy_lost"] / max(1.0, gain)
+        rests = (fight["energy_lost"] + fight.get("perm", 0.0)) / max(1.0, gain)
         exp = m.experience * fight["win"]
         cost = rate * (rests - 1.0)
         out.update(exp=exp, rests=rests, rate=rate, flee=ev["flee"])
@@ -925,9 +964,11 @@ class Tracker:
         d = dict(d, energy=d["energy"] * er, strength=d["strength"] * sr)
         m = Monster(name=d["name"], strength=d["strength"], brains=d["brains"],
                     speed=d["speed"], energy=d["energy"], shield=0.0,
-                    experience=d["experience"], specials=tuple(d["specials"]))
+                    experience=d["experience"], specials=tuple(d["specials"]),
+                    size=d["size"], treasure=d["treasure"])
 
         self.cur_mon = m
+        self.sync_player()
         self.fs = FightState.opening(self.p, m)
         self.fight_prompts, self.fight_hits, self.hits_expected = 0, 0, 0.0
 
@@ -958,6 +999,8 @@ class Tracker:
         self.cur = {
             "name": f"{name} (Mimic)" if mimic_why else d["name"],
             "mimic": bool(mimic_why), "size": size, "flock": flock,
+            "special": d.get("special"),
+            "avoid": d.get("special") in MDB.AVOID,
             "energy": d["energy"], "strength": d["strength"],
             "brains": d["brains"], "base_brains": MDB.MONSTERS[name][1],
             "experience": d["experience"], "speed": d["speed"],
@@ -992,6 +1035,7 @@ class Tracker:
         if not self.cur or not self.cur_mon or not self.fs:
             return
         m, st = self.cur_mon, self.fs
+        self.sync_player()
 
         # keep live player numbers in the fight state
         st.p_energy = self.p.energy
@@ -1001,7 +1045,8 @@ class Tracker:
         self.cur["moves"] = [{
             "move": x["move"], "arg": x["arg"], "win": x["win"],
             "flee": x["flee"], "death": x.get("death", 0.0),
-            "energy_lost": x["energy_lost"],
+            "energy_lost": x["energy_lost"], "mana": x.get("mana_spent", 0.0),
+            "perm": x.get("perm", 0.0),
         } for x in moves]
         self.cur["why"] = explain(self.p, m, st, moves)
         if "worth" not in self.cur:
@@ -1147,6 +1192,8 @@ class Tracker:
                 "gems": self.gems, "amulets": self.amulets, "charms": self.charms,
                 "cloaked": self.cloaked, "cls": self.cls,
                 "blessing": p.blessing, "sin": p.sin,
+                "holywater": self.holywater, "virgin": getattr(self, "virgin", False),
+                "experience": self.experience,
                 "quicksilver": self.quicksilver,
                 "age": self.age, "degenerated": self.degenerated,
                 "circle": self.circle(),
@@ -1165,7 +1212,7 @@ class Tracker:
                self.circle(), self.trove is not None, self.search is not None,
                self.age, self.degenerated, self.next_level_at,
                self.experience, round(p.sin or 0, 3), p.blessing, fight,
-               self.amulets)
+               self.amulets, self.blind)
         if key != self._notes_key:
             self._notes_key = key
             self._notes = self._make_notes()
@@ -1177,6 +1224,11 @@ class Tracker:
         # aging: permanent stat loss every 750 turns
         left = RU.turns_to_degeneration(self.age, self.degenerated)
         later = []                   # routine: shown after the urgent ones
+        if self.blind:
+            out.append("BLIND: every monster shows as 'A monster', so the "
+                       "advisor can't tell what you're fighting, and you can't "
+                       "read trove maps. Cures: a wandering medic (wants most "
+                       "of your gold), athelas from treasure, or ~0.75% a turn.")
         if left is not None:
             later.append(f"Next permanent stat loss in ~{left} turns (age "
                        f"{self.age:.0f}): every move, rest and fight counts.")

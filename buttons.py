@@ -77,6 +77,10 @@ ALWAYS_EVADE = ["Moron"]
 # Dragons (fight.c) -- and evading a Shrieker never fails.
 MUST_EVADE = ["Shrieker"]
 # Survival rules on top of the advisor's pick (auto-play only):
+MIN_EVADE = 0.25          # an Evade that works less often than this is never "safe":
+                          # each failure hands the monster free hits
+MAX_EVADE_FAILS = 2
+FREE_MANA = 10            # a move whose expected fight spends more mana than this isn't "free"       # after this many failed evades in a fight, fight
 SAFE_MAX_DEATH = 0.02     # advisor's move kills you more often than this -> safest move
 GROUP_RESERVE = 0.50      # in a group, don't let a fight leave you below this of max energy
 LOW_ENERGY = 0.30         # below this of max energy, take the safest move ...
@@ -515,6 +519,20 @@ class ButtonOverlay:
         pick can carry real death risk. Returns a move dict; "safety" says
         which rule changed it."""
         moves = f.get("moves") or []
+        # A long-shot Evade isn't an escape, it's free hits for the monster
+        # (a Wraith blinds you with one in five). Drop it unless it works
+        # MIN_EVADE of the time, and after MAX_EVADE_FAILS failures.
+        def bad_evade(m):
+            return m.get("move") == "evade" and (
+                m.get("flee", 0) < MIN_EVADE
+                or (f.get("evade_fails") or 0) >= MAX_EVADE_FAILS)
+        if len(moves) > 1 and any(not bad_evade(m) for m in moves):
+            kept = [m for m in moves if not bad_evade(m)]
+            if bad_evade(moves[0]):
+                moves = kept
+                moves[0] = dict(moves[0], safety="evading rarely works here")
+            else:
+                moves = kept
         top = moves[0]
         death = lambda m: m.get("death", max(0.0, 1 - m.get("win", 0) - m.get("flee", 0)))
         evade = next((m for m in moves if m.get("move") == "evade"), None)
@@ -523,7 +541,9 @@ class ButtonOverlay:
         # deadly AND a mana move at least halves the risk.
         import planner as PL
         limit = PL.MANA_DEATH if mana_death is None else mana_death
-        free = [m for m in moves if m.get("move") not in PL.MANA_MOVES]
+        # "free" = no spell now AND no bolting later in its expected fight
+        free = [m for m in moves if m.get("move") not in PL.MANA_MOVES
+                and m.get("mana", 0) <= FREE_MANA]
         safest = min(free or moves, key=death)
         if free and death(safest) >= limit:
             paid = min(moves, key=death)
@@ -532,7 +552,10 @@ class ButtonOverlay:
         if (top.get("move") in PL.MANA_MOVES and free
                 and death(min(free, key=death)) < limit):
             alt = min(free, key=lambda m: (death(m) > limit, -m.get("win", 0)))
-            if death(alt) < limit:
+            # ...unless the mana stops more lasting harm (blindness, poison,
+            # lost stats) than it's worth: mana is priced at 3 energy a point
+            harm = alt.get("perm", 0) - top.get("perm", 0)
+            if death(alt) < limit and harm < 3.0 * top.get("mana", 0):
                 top = alt
                 top = dict(top, safety=f"saving mana: {death(alt)*100:.1f}% risk without it")
         e, mx = p.get("energy") or 0, p.get("max_energy") or 0
@@ -550,7 +573,10 @@ class ButtonOverlay:
                         and death(m) < AON_ONLY_IF_DEATH), None)
             if alt is not None:
                 return dict(alt, safety="All or Nothing is too risky here")
-        if death(top) > SAFE_MAX_DEATH and death(safest) < death(top):
+        # switch only for a clear gain, not simulation noise between two
+        # moves that are really about as safe
+        if (death(top) > SAFE_MAX_DEATH and death(safest) < death(top) - 0.01
+                and death(safest) < 0.7 * death(top)):
             return pick(safest, f"{death(top)*100:.0f}% death risk")
         if mx:
             after = e - top.get("energy_lost", 0)
@@ -825,6 +851,10 @@ class ButtonOverlay:
         mv = self._safe_move(f, d.get("player") or {}, self.mana_death)
         forced = self._forced_evade(f.get("name"))
         worth = f.get("worth") or {}
+        ev = next((m for m in f["moves"] if m.get("move") == "evade"), None)
+        if (not forced and f.get("avoid") and ev and ev.get("flee", 0) >= MIN_EVADE
+                and (f.get("evade_fails") or 0) < MAX_EVADE_FAILS):
+            forced = f"avoid: {str(f.get('special', '')).lower()}"
         if (not forced and self.skip_low_value and worth.get("skip")
                 and not f.get("acted")):
             forced = "not worth the age"
@@ -945,6 +975,9 @@ class ButtonOverlay:
             if mv.get("forced") == "not worth the age":
                 odds = (f"not worth the age: ~{worth.get('exp', 0):,.0f} exp for "
                         f"~{worth.get('rests', 0):.1f} rests \u00b7 " + odds)
+            elif str(mv.get("forced", "")).startswith("avoid:"):
+                odds = (f"avoid: its special does lasting harm ({mv['forced'][7:]}) "
+                        "\u00b7 " + odds)
             elif mv.get("forced"):
                 odds = f"always evade \"{mv['forced']}\" \u00b7 " + odds
             elif mv.get("safety"):

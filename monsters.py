@@ -151,8 +151,79 @@ SPECIAL_NOTES = {
     "Tit": "TITAN: shatters force fields and damages shields directly.",
     "Tra": "Transporter: can teleport you far away.",
     "U":   "UNICORN: can only be subdued with a Virgin.",
-    "W":   "WRAITH: can blind you.",
+    "W":   "WRAITH: 1 in 5 of its hits blinds you (lasts a long time). Kill it "
+           "fast; evading it rarely works and just gives it more hits.",
 }
+
+
+# The server's special ability for each monster (data/monsters column 7,
+# fight.c SM_* types). These drive the fight simulation; the short codes in
+# the table above are display tags.
+SERVER_SPECIAL = {
+    "A Lamprey": "LAMPREY", "A Spider": "LAMPREY",
+    "An Idiot": "IDIOT", "Modnar": "MODNAR", "A Moron": "MORON",
+    "A Cluricaun": "FAERIES", "A Fir Darrig": "FAERIES", "A Bogle": "FAERIES",
+    "A Fachan": "FAERIES", "A Ghillie Dhu": "FAERIES", "A Killmoulis": "FAERIES",
+    "A Bwca": "FAERIES",
+    "A Mimic": "MIMIC", "A Kobold": "KOBOLD", "A Shrieker": "SHRIEKER",
+    "A Smurf": "SMURF", "A Unicorn": "UNICORN", "A Troll": "TROLL",
+    "A Bonnacon": "BONNACON", "Smeagol": "SMEAGOL", "A Wraith": "WRAITH",
+    "A Vortex": "VORTEX", "A Thaumaturgist": "THAUMATURG", "Shelob": "SHELOB",
+    "A Balrog": "BALROG", "A Titan": "TITAN", "Saruman": "SARUMAN",
+    "A Nazgul": "NAZGUL", "Tiamat": "TIAMAT", "A Jabberwock": "JABBERWOCK",
+    "A Succubus/Incubus": "SUCCUBUS", "A Succubus": "SUCCUBUS",
+    "An Incubus": "SUCCUBUS", "Cerberus": "CERBERUS", "Ungoliant": "UNGOLIANT",
+    "Leanan-Sidhe": "LEANAN", "The Dark Lord": "DARKLORD",
+}
+
+# What each one does, straight from fight.c, and how to play it. "20%"
+# specials replace one in five of its hits, unless your charms block them.
+SERVER_NOTES = {
+    "LAMPREY":   "20% of its hits: no damage, but bigger ones may poison you (0.25).",
+    "FAERIES":   "Holy water kills it the moment it tries to hit you (uses "
+                 "floor(sqrt(size)) vials). Otherwise a plain fight.",
+    "KOBOLD":    "20% of its hits: steals 1 gold and runs off - no experience.",
+    "SHRIEKER":  "NEVER hit it: a hit that doesn't kill it calls a Balrog, Titan "
+                 "or Dragon. Evading it always works.",
+    "UNICORN":   "Never fights: subdued by a Virgin (unless your sin is high), "
+                 "otherwise it runs away.",
+    "TROLL":     "20% of its hits: heals half its missing energy and undoes your "
+                 "melee/skirmish wear. Kill it fast.",
+    "BONNACON":  "20% of its hits: halves your energy and runs off - no experience.",
+    "SMEAGOL":   "Tries to steal your ring; otherwise a plain fight.",
+    "WRAITH":    "20% of its hits blind you (lasts a long time). Evading rarely "
+                 "works - kill it fast.",
+    "VORTEX":    "20% of its hits drain up to 50 x size mana instead of energy.",
+    "THAUMATURG": "20% of its hits transport you far away - fight over, no experience.",
+    "SHELOB":    "20% of its hits poison you (1.0).",
+    "BALROG":    "Two in three hits steal 0.1-0.4% of your experience instead of "
+                 "energy and make it stronger.",
+    "TITAN":     "Every hit wears 1% off your shield and smashes Force Field.",
+    "SARUMAN":   "20% of its hits: swaps charms and amulets, takes your palantir, "
+                 "turns gems to gold or scrambles your stats. Avoid.",
+    "NAZGUL":    "20% of its hits: demands your ring; otherwise an Eldritch curse "
+                 "halves your energy and poisons you (a blessing absorbs it). Avoid.",
+    "TIAMAT":    "20% of its hits: takes half your gold and gems and flies off.",
+    "JABBERWOCK": "20% of its hits: drinks half your quicksilver, or flies off and "
+                  "leaves a Jubjub Bird or Bandersnatch.",
+    "SUCCUBUS":  "20% of its hits: brains x0.8, permanently. Avoid.",
+    "CERBERUS":  "20% of its hits: takes ALL your shield, sword and gold and runs. Avoid.",
+    "UNGOLIANT": "20% of its hits: poison 5 and -1 speed, permanently. Avoid.",
+    "LEANAN":    "20% of its hits: permanently saps strength. Avoid.",
+    "DARKLORD":  "Every hit kills you. Run - evading the Dark Lord always works.",
+    "MIMIC":     "Wears another monster's name. Never hits back; evading works 5%.",
+    "MODNAR":    "Stats randomised 50%-150%: the numbers shown are a guess.",
+}
+
+# Avoid: permanent losses no kill pays for. Auto-play evades these when
+# running has a real chance.
+AVOID = {"SARUMAN", "NAZGUL", "SUCCUBUS", "CERBERUS", "UNGOLIANT", "LEANAN",
+         "TIAMAT", "DARKLORD", "SHRIEKER"}
+
+
+def server_special(name):
+    """'TROLL', 'WRAITH', ... or None."""
+    return SERVER_SPECIAL.get(name)
 
 
 def scaled(name, size=1):
@@ -171,11 +242,18 @@ def scaled(name, size=1):
         "experience": xp * size,
         "treasure": tr,
         "flock": flock,
-        "specials": [s for s in spec.split(",") if s],
+        "specials": [s for s in spec.split(",") if s]
+                    + (["SM:" + SERVER_SPECIAL[name]] if name in SERVER_SPECIAL else []),
+        "special": SERVER_SPECIAL.get(name),
     }
 
 
 def notes_for(mon):
+    """Notes from the server source first; the old display tags only where
+    the source has nothing (Phantasia 5 additions such as Dragons)."""
+    sm = mon.get("special")
+    if sm:
+        return [SERVER_NOTES[sm]] if sm in SERVER_NOTES else []
     return [SPECIAL_NOTES[s] for s in mon["specials"] if s in SPECIAL_NOTES]
 
 

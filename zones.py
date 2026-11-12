@@ -136,20 +136,22 @@ def _auto_policy(use_mana):
 
 
 def _fight(player, mon, st, pick):
-    """Play one fight out. Returns 'win', 'flee' or 'death'."""
-    from planner import apply_move, try_evade, _monster_turns
-    while st.rounds < 120 and st.p_energy > 0:
+    """Play one fight out. Returns 'win', 'flee', 'gone' or 'death'."""
+    from planner import apply_move, try_evade, _monster_turns, _outcome
+    out = _outcome(st)
+    while out is None:
         mv, arg = pick(player, mon, st)
         if mv == "evade":
             st.rounds += 1
             if try_evade(player, mon, st):
                 return "flee"
+        else:
+            apply_move(player, mon, st, mv, arg)
+        out = _outcome(st)
+        if out is None:
             _monster_turns(player, mon, st)
-            continue
-        if apply_move(player, mon, st, mv, arg):
-            return "win"
-        _monster_turns(player, mon, st)
-    return "death"
+            out = _outcome(st)
+    return out
 
 
 def simulate_encounter(player, mon, flock, use_mana, trials=SIM_TRIALS):
@@ -175,7 +177,7 @@ def simulate_encounter(player, mon, flock, use_mana, trials=SIM_TRIALS):
             if res == "death":
                 deaths += 1
                 break
-            if res == "flee":          # running cancels the monster: no friends
+            if res in ("flee", "gone"):  # it's gone: no experience, no friends
                 fled += 1
                 break
             xp += mon.experience
@@ -222,7 +224,8 @@ def evaluate_circle(player, circle, sample=None):
             continue
         m = Monster(name=d["name"], strength=d["strength"], brains=d["brains"],
                     speed=d["speed"], energy=d["energy"], shield=0.0,
-                    experience=d["experience"], specials=tuple(d["specials"]))
+                    experience=d["experience"], specials=tuple(d["specials"]),
+                    size=d["size"], treasure=d["treasure"])
         time.sleep(0.001)      # runs on a background thread: let the proxy in
         r = simulate_encounter(full, m, d["flock"], use_mana=False)
         if r["death"] > SAFE_DEATH and full.magiclvl >= 5 and full.mana > 0:

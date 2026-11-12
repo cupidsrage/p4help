@@ -64,6 +64,15 @@ class FightState:
     ticks: int = 0                 # passes of the server's fight loop
     t_base: int = 0                # ticks already reflected in your Speed
     pre_roll: bool = False         # it may act before your first move
+    # monster specials (fight.c Do_monsthits)
+    p_holy: float = 0.0            # holy water vials
+    p_charms: float = 0.0
+    p_gold: float = 0.0
+    p_gems: float = 0.0
+    p_blind: bool = False
+    p_blessing: bool = False
+    gone: bool = False             # it left (stole, ran, transported you...)
+    perm: float = 0.0              # lasting harm, in energy-equivalent points
 
     @staticmethod
     def opening(player, monster):
@@ -73,6 +82,10 @@ class FightState:
             m_strength=monster.strength, m_speed=monster.speed,
             m_max_energy=monster.energy, m_max_strength=monster.strength,
             m_max_speed=monster.speed, m_experience=monster.experience,
+            p_holy=getattr(player, "holywater", 0), p_charms=getattr(player, "charms", 0),
+            p_gold=getattr(player, "gold", 0), p_gems=getattr(player, "gems", 0),
+            p_blind=getattr(player, "blind", False),
+            p_blessing=getattr(player, "blessing", False),
         )
 
 
@@ -128,9 +141,184 @@ def _land(st, mon, dmg):
         st.m_shield = 0.0
 
 
-def _monster_hit(st):
-    """Do_monsthits: floor(1 + RND * strength). A force field is a pool of
-    hit points that soaks damage before your energy does."""
+def special_of(mon):
+    """The server special ('TROLL', 'WRAITH', ...) or None. Cached on the
+    monster: this runs on every simulated hit."""
+    d = mon.__dict__
+    if "_sm" not in d:
+        d["_sm"] = next((s[3:] for s in mon.specials if s.startswith("SM:")), None)
+    return d["_sm"]
+
+
+# Lasting harm from specials, priced in energy-equivalent points so it can
+# sit next to energy lost in true_cost(). Fractions are of max energy.
+PERM = {
+    "poison": 0.25,       # per unit of poison: drains every turn, costs a medic
+    "blind": 0.5,         # names hidden, no maps, until cured
+    "brains": 0.5,        # Succubus: brains x0.8 for good
+    "speed": 0.15,        # per point of speed lost for good
+    "saruman": 0.3,
+    "transport": 0.1,     # carried far away: the walk back
+    "jabber_friend": 0.4,  # left facing a Jubjub Bird or Bandersnatch
+    "blessing": 0.3,
+    "maxenergy": 0.01,    # Nazgul curse: max energy x0.99
+    "charm": 0.02,        # per charm spent blocking a special
+    "exp": 0.0,           # Balrog experience theft (counted as a weaker fight)
+}
+GOLD_PER_ENERGY = 5.0     # a shield point costs 5 gold: gold -> energy points
+GEM_GOLD = 1000.0         # N_GEMVALUE
+
+
+def _perm(st, player, kind, amount=1.0):
+    st.perm += PERM[kind] * amount * max(1.0, getattr(player, "max_energy", 0) or 0)
+
+
+def _charms_block(player, mon, st, sm):
+    """Charms soak a special (fight.c): dtemp = treasure type -
+    floor((class + 1) * 1.5), at least 1; it costs between dtemp and
+    sqrt(size) * dtemp charms."""
+    if sm in ("MODNAR", "MORON", "SMURF", "TROLL", "SMEAGOL", "MIMIC"):
+        return False
+    if sm == "SARUMAN" and st.p_charms > getattr(player, "amulets", 0):
+        return False
+    dtemp = max(1.0, (getattr(mon, "treasure", 0) or 0)
+                - math.floor((getattr(player, "ptype", 1) + 1) * 1.5))
+    need = max(dtemp, math.ceil(random.random()
+                                * math.floor(math.sqrt(max(1, mon.size)) * dtemp)))
+    if st.p_charms >= need:
+        st.p_charms -= need
+        _perm(st, player, "charm", need)
+        return True
+    return False
+
+
+def _special(player, mon, st, sm):
+    """One of its 20% specials. Returns True if it replaced the hit."""
+    size = max(1.0, getattr(mon, "size", 1) or 1)
+    mx = max(1.0, player.max_energy)
+    if sm == "LEANAN":
+        lost = max(0.02 * player.strength,
+                   min(player.level or 1, 1 + random.random() * (size * 4 - 1)))
+        st.strength_spell -= lost
+        st.perm += lost / max(1.0, player.strength) * mx
+        return True
+    if sm == "THAUMATURG":
+        st.gone = True
+        _perm(st, player, "transport")
+        return True
+    if sm == "SARUMAN":
+        _perm(st, player, "saruman")
+        return True
+    if sm == "VORTEX":
+        st.p_mana -= min(st.p_mana, math.floor(random.random() * 50 * size))
+        return True
+    if sm == "SUCCUBUS":
+        _perm(st, player, "brains")
+        return True
+    if sm == "TIAMAT":
+        st.perm += (st.p_gold / 2 + st.p_gems / 2 * GEM_GOLD) / GOLD_PER_ENERGY
+        st.gone = True
+        return True
+    if sm == "KOBOLD":
+        if st.p_gold > 0:
+            st.p_gold -= 1
+            st.gone = True
+            return True
+        return False
+    if sm == "SHELOB":
+        _perm(st, player, "poison", 1.0)
+        return True
+    if sm == "LAMPREY":
+        if random.random() * 10 < size / 2 - 1:
+            _perm(st, player, "poison", 0.25)
+        return True
+    if sm == "BONNACON":
+        st.p_energy /= 2.0
+        st.gone = True
+        return True
+    if sm == "CERBERUS":
+        shield = getattr(player, "shield", 0) or 0
+        st.perm += shield + st.p_gold / GOLD_PER_ENERGY
+        st.p_energy = min(st.p_energy, mx - shield)
+        st.gone = True
+        return True
+    if sm == "UNGOLIANT":
+        _perm(st, player, "poison", 5.0)
+        _perm(st, player, "speed", 1.0)
+        st.speed_spell -= 1.0
+        return True
+    if sm == "JABBERWOCK":
+        qs = getattr(player, "quicksilver", 0) or 0
+        if random.random() > .75 or qs == 0:
+            st.gone = True
+            _perm(st, player, "jabber_friend")
+        else:
+            lost = math.sqrt(qs) - math.sqrt(math.floor(qs * .5))
+            st.speed_spell -= lost
+            _perm(st, player, "speed", lost)
+        return True
+    if sm == "TROLL":
+        st.m_energy += math.floor((st.m_max_energy - st.m_energy) / 2.0)
+        st.m_strength, st.m_speed = st.m_max_strength, st.m_max_speed
+        st.melee_dmg = st.skirm_dmg = 0.0
+        return True
+    if sm == "WRAITH":
+        if not st.p_blind:
+            st.p_blind = True
+            _perm(st, player, "blind")
+            return True
+        return False
+    if sm == "NAZGUL":
+        if st.p_blessing:
+            st.p_blessing = False
+            _perm(st, player, "blessing")
+            return False                     # then a normal hit
+        st.p_energy = (st.p_energy + st.force_field) / 2.0
+        st.force_field = 0.0
+        _perm(st, player, "poison", 0.5)
+        _perm(st, player, "maxenergy")
+        return True
+    return False                             # Smeagol without a ring, etc.
+
+
+def _monster_hit(st, player=None, mon=None):
+    """Do_monsthits: floor(1 + RND * strength), unless a special takes the
+    hit. A force field is a pool of hit points that soaks damage first."""
+    sm = special_of(mon) if mon is not None else None
+    if sm is None:                           # plain monster: the common case
+        dmg = math.floor(1.0 + random.random() * max(0.0, st.m_strength))
+        if st.force_field < dmg:
+            st.p_energy -= dmg - st.force_field
+            st.force_field = 0.0
+        else:
+            st.force_field -= dmg
+        return dmg
+    if sm == "DARKLORD":
+        st.p_energy = 0.0                     # hits just enough to kill you
+        return 0
+    if sm == "BALROG" and random.random() > .33 and getattr(player, "experience", 1):
+        # whips away experience instead of energy, and grows stronger
+        st.m_strength += min(.05 * (getattr(player, "shield", 0) or 0),
+                             math.floor(math.sqrt((getattr(player, "experience", 0) or 0)
+                                                  / 1800.0)))
+        return 0
+    if sm == "FAERIES" and st.p_holy >= math.floor(math.sqrt(max(1, mon.size))):
+        st.p_holy -= math.floor(math.sqrt(max(1, mon.size)))
+        st.m_energy = 0.0                     # "Your holy water killed it!"
+        return 0
+    if sm == "TITAN":
+        st.perm += 0.01 * (getattr(player, "shield", 0) or 0)
+        dmg = math.floor(1.0 + random.random() * max(0.0, st.m_strength))
+        st.force_field = 0.0                  # punches straight through
+        st.p_energy -= dmg
+        return dmg
+    if (sm and sm not in ("SHRIEKER", "MIMIC", "MODNAR", "MORON", "SMURF",
+                          "IDIOT", "UNICORN") and random.random() < 0.2):
+        if not (getattr(player, "ptype", 1) == 4 and random.random() < 0.25):
+            if _charms_block(player, mon, st, sm):
+                return 0
+            if _special(player, mon, st, sm):
+                return 0
     dmg = math.floor(1.0 + random.random() * max(0.0, st.m_strength))
     if st.force_field < dmg:
         st.p_energy -= dmg - st.force_field
@@ -160,7 +348,7 @@ def _monster_turns(player, mon, st, after_action=True):
     firsthit = not after_action and getattr(player, "blessing", False)
     sin = getattr(player, "sin", 0.0) or 0.0
     for _ in range(400):
-        if st.p_energy <= 0:
+        if st.p_energy <= 0 or st.gone or st.m_energy <= 0:
             return
         _wake(st)
         q = quickness_of(player, st)
@@ -176,7 +364,7 @@ def _monster_turns(player, mon, st, after_action=True):
             return
         if no_init or not (random.random() * st.m_speed > random.random() * q):
             return                          # your turn
-        _monster_hit(st)
+        _monster_hit(st, player, mon)
         st.ticks += 1
     st.p_energy = min(st.p_energy, 0.0)
 
@@ -337,11 +525,32 @@ def try_evade(player, mon, st):
             > random.random() * (st.m_speed * 1.1 + 1) * (mon.brains + 1))
 
 
+def _outcome(s):
+    """None while the fight goes on; else 'win', 'death' or 'gone' (it left
+    with no experience: stole, ran off, transported you...)."""
+    if s.p_energy <= 0:
+        return "death"
+    if s.m_energy <= 0:
+        return "win"
+    if s.gone:
+        return "gone"
+    if s.rounds >= 120:
+        return "death"
+    return None
+
+
 def start_trial(player, mon, st):
     """Copy of st for one simulated fight; lets the monster have its
     opening hits if the fight hasn't reached your first prompt yet."""
     s = replace(st)
     s.t_base = s.ticks
+    if special_of(mon) == "UNICORN":
+        # never fights: a Virgin subdues it, otherwise it runs off (fight.c)
+        if getattr(player, "virgin", False):
+            s.m_energy = 0.0
+        else:
+            s.gone = True
+        return s
     if s.pre_roll:
         s.pre_roll = False
         _monster_turns(player, mon, s, after_action=False)
@@ -441,31 +650,32 @@ def run_policy(player, mon, pol, trials=1200, max_rounds=120):
     wins = fled = died = 0
     en_lost = mana = rnds = 0.0
 
+    perm = 0.0
     for _ in range(trials):
         st = start_trial(player, mon, FightState.opening(player, mon))
-        while st.rounds < max_rounds and st.p_energy > 0:
+        out = _outcome(st)
+        while out is None:
             move, arg = fn(player, mon, st)
-
             if move == "evade":
                 st.rounds += 1
                 if try_evade(player, mon, st):
-                    fled += 1
+                    out = "flee"
                     break
+            else:
+                apply_move(player, mon, st, move, arg)
+            out = _outcome(st)
+            if out is None:
                 _monster_turns(player, mon, st)
-                if st.p_energy <= 0:
-                    died += 1
-                    break
-                continue
-
-            if apply_move(player, mon, st, move, arg):
-                wins += 1
-                break
-            _monster_turns(player, mon, st)
-            if st.p_energy <= 0:
-                died += 1
-                break
+                out = _outcome(st)
+            if st.rounds >= max_rounds and out is None:
+                out = "death"
+        if out == "win":
+            wins += 1
+        elif out in ("flee", "gone"):
+            fled += 1
         else:
             died += 1
+        perm += st.perm
 
         en_lost += player.energy - max(0.0, st.p_energy)
         mana += player.mana - st.p_mana
@@ -479,6 +689,7 @@ def run_policy(player, mon, pol, trials=1200, max_rounds=120):
         "energy_lost": en_lost / trials,
         "mana_spent": mana / trials,
         "rounds": rnds / trials,
+        "perm": perm / trials,
     }
 
 
@@ -573,8 +784,11 @@ def true_cost(player, st, r, danger):
         # only "cheap" when you're desperate: penalty fades as danger -> 1
         aon_penalty = 120.0 * (1.0 - danger)
 
+    # --- lasting harm from specials (blindness, poison, lost stats...) ---
+    perm = r.get("perm", 0.0)
+
     return (energy * energy_price + mana * mana_price
-            + death_penalty + aon_penalty)
+            + death_penalty + aon_penalty + perm)
 
 
 def danger_of(player, mon, st):
@@ -610,7 +824,8 @@ NO_MANA_WIN = 0.90     # a no-mana plan this sure to win and no deadlier than
                        # MANA_DEATH beats any plan that spends mana
 
 
-AON_ONLY_IF_DEATH = 0.50   # rank AoN first only if everything else is this deadly
+AON_ONLY_IF_DEATH = 0.50
+MIN_EVADE = 0.25           # an Evade working less often than this isn't ranked first   # rank AoN first only if everything else is this deadly
 
 
 def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
@@ -619,6 +834,20 @@ def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
     surviving: a failed cast doubles the monster's strength and speed (a
     size-9 Cocodrill hit for 1551 after three failures and killed a player)."""
     res = _score_moves(player, mon, st, trials, mana_fallback, only)
+    # An Evade that rarely works isn't an escape: each failure gives the
+    # monster free hits. Don't rank it first while something else wins.
+    if (only is None and res and res[0]["move"] == "evade"
+            and res[0]["flee"] < MIN_EVADE):
+        alt = next((r for r in res[1:] if r["win"] >= 0.5), None)
+        if alt is not None:
+            res = [alt] + [r for r in res if r is not alt]
+    # Nick does 1 + sword damage and makes the monster 2 faster each time;
+    # it only "ties" because the rest of the fight is the same either way.
+    if only is None and res and res[0]["move"] == "nick":
+        alt = next((r for r in res[1:] if r["move"] != "nick"
+                    and r["win"] >= res[0]["win"] - 0.05), None)
+        if alt is not None:
+            res = [alt] + [r for r in res if r is not alt]
     if only is None and res and res[0]["move"] == "aon":
         # next move in the advisor's own ranking that's reasonably safe
         best = next((r for r in res[1:]
@@ -650,36 +879,32 @@ def _score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
         wins = fled = 0
         en = 0.0
         mana = 0.0
+        perm = 0.0
         for _ in range(trials):
             s = start_trial(player, mon, st)
-            if s.p_energy <= 0:              # killed before your first move
-                en += player.energy
-                continue
-
-            if mv == "evade":
-                s.rounds += 1
-                if try_evade(player, mon, s):
-                    fled += 1
-                    en += player.energy - s.p_energy
-                    mana += st.p_mana - s.p_mana
-                    continue
-                _monster_turns(player, mon, s)
-            else:
-                dead = apply_move(player, mon, s, mv, arg)
-                if dead:
-                    wins += 1
-                    en += player.energy - s.p_energy
-                    mana += st.p_mana - s.p_mana
-                    continue
-                _monster_turns(player, mon, s)
-
+            out = _outcome(s)
+            if out is None:
+                if mv == "evade":
+                    s.rounds += 1
+                    if try_evade(player, mon, s):
+                        out = "flee"
+                    else:
+                        _monster_turns(player, mon, s)
+                else:
+                    apply_move(player, mon, s, mv, arg)
+                    out = _outcome(s)
+                    if out is None:
+                        _monster_turns(player, mon, s)
             # ...then finish the fight with a sane default.
             #
             # IMPORTANT: the fallback must not reflexively bolt, or every move's
             # cost gets polluted with follow-up mana (a FREE luckout was showing
             # up as "33 mana" purely because of what came after it). Only reach
             # for mana when melee is actually losing the race.
-            while s.p_energy > 0 and s.m_energy > 0 and s.rounds < 120:
+            while out is None:
+                out = _outcome(s)
+                if out is not None:
+                    break
                 if not s.luckout_spent and "Mo" not in mon.specials:
                     nxt, narg = "luckout", None
                 else:
@@ -703,12 +928,16 @@ def _score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
                         nxt, narg = "paralyze", None
                     else:
                         nxt, narg = "melee", None
-                if apply_move(player, mon, s, nxt, narg):
-                    wins += 1
-                    break
-                _monster_turns(player, mon, s)
+                apply_move(player, mon, s, nxt, narg)
+                if _outcome(s) is None:
+                    _monster_turns(player, mon, s)
+            if out == "win":
+                wins += 1
+            elif out in ("flee", "gone"):
+                fled += 1
             en += player.energy - max(0.0, s.p_energy)
             mana += st.p_mana - s.p_mana
+            perm += s.perm - st.perm
 
         results.append({
             "move": mv,
@@ -718,6 +947,7 @@ def _score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
             "death": 1.0 - (wins / trials) - (fled / trials),
             "energy_lost": en / trials,
             "mana_spent": mana / trials,
+            "perm": perm / trials,
         })
 
     # Rank by actual KILL probability first. Escape only matters when the fight

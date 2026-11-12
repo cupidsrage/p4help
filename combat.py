@@ -65,6 +65,18 @@ class Player:
     ring: bool = False
     blessing: bool = False   # first hit in fights (fight.c firsthit)
     sin: float = 0.0
+    # carried things monster specials take or use (fight.c Do_monsthits)
+    holywater: float = 0
+    charms: float = 0
+    amulets: float = 0
+    virgin: bool = False
+    gold: float = 0
+    gems: float = 0
+    quicksilver: float = 0
+    experience: float = 0
+    blind: bool = False
+    ptype: int = 1           # class: 0 magic-user, 1 fighter, 2 elf, 3 dwarf,
+                             # 4 halfling, 5 experimento (charm costs)
 
     def might(self, strength_spell=0.0, ring_in_use=False):
         # The client's Strength already includes the sword bonus
@@ -85,6 +97,8 @@ class Monster:
     shield: float = 0
     experience: float = 0
     specials: tuple = ()
+    size: float = 1          # fight.c uses it for some specials
+    treasure: float = 0      # treasure type: charms needed to block specials
 
     def spell_immune(self):
         return bool(set(self.specials) & SPELL_IMMUNE)
