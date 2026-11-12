@@ -32,15 +32,19 @@ ML_PARALYZE, MM_PARALYZE = 60.0, 125.0
 
 
 # ---------------------------------------------------------------- fight state
+FATIGUE = 50                       # N_FATIGUE: every 50 passes costs 1 speed
+NO_INITIATIVE = {"DL", "Sh", "Mi"}  # never attack on initiative (fight.c)
+
+
 @dataclass
 class FightState:
-    """Where the fight actually is, right now."""
+    """Where the fight actually is, right now (at YOUR prompt)."""
     p_energy: float = 0.0
     p_mana: float = 0.0
     p_shield: float = 0.0
     force_field: float = 0.0
-    strength_spell: float = 0.0    # accumulated Increase Might
-    speed_spell: float = 0.0       # accumulated Haste
+    strength_spell: float = 0.0    # Increase Might cast in THIS simulation
+    speed_spell: float = 0.0       # Haste cast in THIS simulation
     luckout_spent: bool = False
     aon_spent: bool = False
     ring_in_use: bool = False
@@ -49,7 +53,17 @@ class FightState:
     m_strength: float = 0.0
     m_speed: float = 0.0
     m_paralyzed: bool = False
-    rounds: int = 0
+    rounds: int = 0                # your actions
+    # server-side monster numbers (fight.c keeps these per fight)
+    m_max_energy: float = 0.0
+    m_max_strength: float = 0.0
+    m_max_speed: float = 0.0
+    m_experience: float = 0.0
+    melee_dmg: float = 0.0         # melee total: wears its strength down
+    skirm_dmg: float = 0.0         # skirmish total: wears its speed down
+    ticks: int = 0                 # passes of the server's fight loop
+    t_base: int = 0                # ticks already reflected in your Speed
+    pre_roll: bool = False         # it may act before your first move
 
     @staticmethod
     def opening(player, monster):
@@ -57,37 +71,103 @@ class FightState:
             p_energy=player.energy, p_mana=player.mana, p_shield=player.shield,
             m_energy=monster.energy, m_shield=monster.shield,
             m_strength=monster.strength, m_speed=monster.speed,
+            m_max_energy=monster.energy, m_max_strength=monster.strength,
+            m_max_speed=monster.speed, m_experience=monster.experience,
         )
 
 
 # ---------------------------------------------------------------- primitives
+def base_strength(player):
+    """Strength without the sword bonus. The client's Strength already
+    includes it: strength * (1 + sqrt(sword) * .04) (stats.c Do_strength)."""
+    return player.strength / (1 + math.sqrt(max(0.0, player.sword)) * SWORDPOWER)
+
+
 def might_of(player, st):
-    m = (player.strength * (1 + math.sqrt(max(0.0, player.sword)) * SWORDPOWER)
-         + st.strength_spell)
+    """fight.c: might = strength*(1+sqrt(sword)*.04) + strengthSpell, x2 with
+    a ring. That first part is exactly the Strength the client shows (and a
+    Might cast is added to it live), so only add casts from the simulation."""
+    m = player.strength + st.strength_spell
     if st.ring_in_use:
         m *= 2
     return m
 
 
+def quickness_of(player, st):
+    """Your speed now: Haste adds, and fatigue takes 1 per 50 passes
+    (stats.c Do_speed). The client's Speed already holds earlier fatigue."""
+    tired = st.ticks // FATIGUE - st.t_base // FATIGUE
+    return max(0.0, player.quickness + st.speed_spell - tired)
+
+
+def p_monster_acts(m_speed, quickness):
+    """Chance it wins one initiative roll: RND*its speed > RND*your speed."""
+    a, b = max(0.0, m_speed), max(0.0, quickness)
+    if a <= 0:
+        return 0.0
+    if b <= 0:
+        return 1.0
+    return a / (2 * b) if a <= b else 1 - b / (2 * a)
+
+
+def hits_per_turn(player, mon, st):
+    """Expected monster hits between two of your moves. Each pass of the
+    server loop it EITHER hits you (wins initiative) OR you act, so the
+    hits come in a run that ends the first time you win: p / (1 - p)."""
+    if set(mon.specials) & NO_INITIATIVE:
+        return 0.0
+    p = min(0.95, p_monster_acts(st.m_speed, quickness_of(player, st)))
+    return p / (1 - p)
+
+
 def _land(st, mon, dmg):
-    """Damage eats monster shield first, then energy."""
+    """Damage eats monster shield first, then energy (Do_hitmonster)."""
     st.m_shield -= dmg
     if st.m_shield < 0:
         st.m_energy += st.m_shield
         st.m_shield = 0.0
 
 
-def _monster_swing(st, mon):
-    """inflict = 1 + r*strength, capped at your energy. Force field eats ONE hit."""
-    if st.m_paralyzed or st.m_speed < 0:
-        return 0.0
+def _monster_hit(st):
+    """Do_monsthits: floor(1 + RND * strength). A force field is a pool of
+    hit points that soaks damage before your energy does."""
     dmg = math.floor(1.0 + random.random() * max(0.0, st.m_strength))
-    dmg = min(dmg, st.p_energy)
-    if st.force_field > 0:
-        # NB: any hit zeroes the whole field - it is one free hit, not a pool
+    if st.force_field < dmg:
+        st.p_energy -= dmg - st.force_field
         st.force_field = 0.0
-    st.p_energy -= dmg
+    else:
+        st.force_field -= dmg
     return dmg
+
+
+def _wake(st):
+    """Start of every pass: a paralyzed monster's speed climbs back by 1."""
+    st.m_speed = min(st.m_speed + 1.0, st.m_max_speed)
+    st.m_paralyzed = st.m_speed <= 0
+
+
+def _monster_turns(player, mon, st, after_action=True):
+    """The server's fight loop, from the end of your action until your next
+    prompt. Each pass, paralysis wears off a little, then it rolls
+    initiative: if it wins it hits you and the loop goes round again; if
+    you win, it's your move. So a slow monster often gets no hit at all
+    between your swings, and a fast one can hit several times in a row."""
+    if after_action:
+        st.ticks += 1                       # the pass you just acted in
+    no_init = bool(set(mon.specials) & NO_INITIATIVE)
+    for _ in range(400):
+        if st.p_energy <= 0:
+            return
+        _wake(st)
+        q = quickness_of(player, st)
+        if q <= 0 and st.m_speed > 0 and not no_init:
+            st.p_energy = 0.0               # speed 0: it never stops hitting
+            return
+        if no_init or not (random.random() * st.m_speed > random.random() * q):
+            return                          # your turn
+        _monster_hit(st)
+        st.ticks += 1
+    st.p_energy = min(st.p_energy, 0.0)
 
 
 def legal_moves(player, mon, st):
@@ -100,15 +180,23 @@ def legal_moves(player, mon, st):
     if player.sword > 0:
         out.append("nick")
     if not immune:
-        if not st.aon_spent and player.magiclvl >= ML_AON and st.p_mana >= MM_AON:
+        # AoN costs 1 mana if you have it, but works without; the advisor
+        # still only tries it once (a miss doubles the monster)
+        if not st.aon_spent and player.magiclvl >= ML_AON:
             out.append("aon")
-        if player.magiclvl >= ML_BOLT and st.p_mana > 0:
+        if player.magiclvl >= ML_BOLT and st.p_mana >= 1:
             out.append("bolt")
         if (player.magiclvl >= ML_INCRMIGHT
                 and st.p_mana >= MM_INCRMIGHT + player.magiclvl / 2):
             out.append("might")
+        if (player.magiclvl >= ML_HASTE
+                and st.p_mana >= MM_HASTE + player.magiclvl / 2):
+            out.append("haste")
+        if (player.magiclvl >= ML_FORCEFIELD and st.p_mana > MM_FORCEFIELD
+                and st.force_field <= 0):
+            out.append("forcefield")
         if (player.magiclvl >= ML_PARALYZE and st.p_mana >= MM_PARALYZE
-                and not st.m_paralyzed):
+                and st.m_speed > 0):
             out.append("paralyze")
     if player.ring and not st.ring_in_use:
         out.append("ring")
@@ -116,66 +204,96 @@ def legal_moves(player, mon, st):
 
 
 def apply_move(player, mon, st, move, bolt_mana=None):
-    """Run one player action. Mutates st. Returns True if the monster died."""
+    """Run one player action exactly as fight.c does. Mutates st. Returns
+    True if the monster died (or the fight ended in your favour)."""
     st.rounds += 1
+    max_e = max(1.0, st.m_max_energy or mon.energy)
 
     if move == "melee":
         dmg = math.floor((0.5 + 1.3 * random.random()) * might_of(player, st))
-        if "SS" in mon.specials:
-            dmg *= 0.5
+        st.melee_dmg += dmg
+        # melee wears its strength down: up to -1/3 as its energy runs out
+        st.m_strength = (st.m_max_strength
+                         - (st.melee_dmg / max_e) * (st.m_max_strength / 3.0))
         _land(st, mon, dmg)
 
     elif move == "skirmish":
         dmg = math.floor((0.33 + 1.1 * random.random()) * might_of(player, st))
-        if "SS" in mon.specials:
-            dmg *= 0.5
+        st.skirm_dmg += dmg
+        # skirmish wears its speed down instead (and resets a paralysis)
+        st.m_speed = (st.m_max_speed
+                      - (st.skirm_dmg / max_e) * (st.m_max_speed / 3.0))
         _land(st, mon, dmg)
-        # degrades its SPEED (helps you flee; does NOT reduce its damage)
-        st.m_speed = max(0.0, st.m_speed * 0.97)
 
     elif move == "nick":
-        dmg = math.floor((0.4 + 1.0 * random.random()) * might_of(player, st))
-        _land(st, mon, dmg)
+        # 1 + sword damage, steals 10% of its experience, makes it faster
+        st.m_experience -= math.floor(st.m_experience / 10.0)
+        st.m_max_speed += 2.0
+        st.m_speed = 0.0 if st.m_speed < 0 else st.m_speed + 2.0
+        _land(st, mon, 1.0 + player.sword)
 
     elif move == "luckout":
         st.luckout_spent = True
         if "DL" not in mon.specials:
-            if random.random() * player.brains >= random.random() * mon.brains:
+            if not (random.random() * player.brains < random.random() * mon.brains):
                 st.m_energy = 0.0
                 return True
 
     elif move == "aon":
         st.aon_spent = True
-        st.p_mana = max(0.0, st.p_mana - MM_AON)
+        if st.p_mana >= MM_AON:
+            st.p_mana -= MM_AON
         chance = (3000.0 * player.magiclvl
-                  / (mon.experience + 10000.0 * player.magiclvl))
-        if random.random() < chance:
+                  / (st.m_experience + 10000.0 * player.magiclvl))
+        if chance > random.random():
             st.m_energy = 0.0
             return True
-        # failure: it doubles strength AND speed
-        st.m_strength *= 2.0
+        # miss: strength AND max strength double (undoing melee wear), speed too
+        st.m_max_strength *= 2.0
+        st.m_strength = st.m_max_strength
+        st.m_max_speed *= 2.0
         st.m_speed = st.m_speed * 2.0 if st.m_speed * 2.0 > 1 else st.m_speed + 1
 
     elif move == "bolt":
         spend = min(bolt_mana or st.p_mana, st.p_mana)
         st.p_mana -= spend
-        scale = player.magiclvl ** 0.40 + 1.0
-        if "Mr" in mon.specials:
-            scale *= 0.5
-        dmg = math.floor(spend * (0.7 + 0.6 * random.random()) * scale)
+        dmg = math.floor(spend * (0.7 + 0.6 * random.random())
+                         * (player.magiclvl ** 0.40 + 1.0))
+        if player.level > 10 and (random.random() * (player.level + player.magiclvl)
+                                  < math.sqrt(player.level)):
+            if random.random() > 0.5:
+                dmg *= random.random() / 2 + 0.5          # fumbled
+            else:
+                dmg += dmg * random.random()              # surge...
+                st.p_mana += spend * (random.random() / 2 + 0.25)   # ...and refund
+        if "DL" in mon.specials:
+            dmg = 0.0
         _land(st, mon, dmg)
 
     elif move == "might":
-        cost = MM_INCRMIGHT + player.magiclvl / 2
-        st.p_mana -= cost
-        # stacks, additive, lasts the fight
-        st.strength_spell += player.strength * (
+        st.p_mana -= MM_INCRMIGHT + player.magiclvl / 2
+        # stacks, lasts the fight; based on strength without the sword
+        st.strength_spell += base_strength(player) * (
             1 - 10.0 / (math.sqrt(player.magiclvl) + 10.0))
+
+    elif move == "haste":
+        st.p_mana -= MM_HASTE + player.magiclvl / 2
+        st.speed_spell += player.quickness / 2 * (
+            1 - 10.0 / (math.sqrt(player.magiclvl) + 10.0))
+
+    elif move == "forcefield":
+        full = MM_FORCEFIELD + player.magiclvl / 2
+        if st.p_mana < full:
+            st.force_field += 40 * (st.p_mana - MM_FORCEFIELD)
+            st.p_mana = 0.0
+        else:
+            st.p_mana -= full
+            st.force_field += 20 * player.magiclvl
 
     elif move == "paralyze":
         st.p_mana -= MM_PARALYZE
         chance = (4000.0 * player.magiclvl
-                  / (mon.experience + 6000.0 * player.magiclvl))
+                  / (st.m_experience + 6000.0 * player.magiclvl))
         if chance > random.random() - 0.1:
             st.m_paralyzed = True
             st.m_speed = -2.0
@@ -194,8 +312,19 @@ def try_evade(player, mon, st):
         return True
     if "Mi" in mon.specials and random.random() >= 0.05:
         return False
-    return (random.random() * (player.quickness * 1.1 + 1) * (player.brains + 1)
+    return (random.random() * (quickness_of(player, st) * 1.1 + 1) * (player.brains + 1)
             > random.random() * (st.m_speed * 1.1 + 1) * (mon.brains + 1))
+
+
+def start_trial(player, mon, st):
+    """Copy of st for one simulated fight; lets the monster have its
+    opening hits if the fight hasn't reached your first prompt yet."""
+    s = replace(st)
+    s.t_base = s.ticks
+    if s.pre_roll:
+        s.pre_roll = False
+        _monster_turns(player, mon, s, after_action=False)
+    return s
 
 
 # ---------------------------------------------------------------- policies
@@ -205,8 +334,6 @@ def _bolt_to_kill(player, st, mon, safe=True):
     if hp <= 0 or player.magiclvl < ML_BOLT:
         return None
     scale = player.magiclvl ** 0.40 + 1.0
-    if "Mr" in mon.specials:
-        scale *= 0.5
     mult = 0.7 if safe else 1.0
     return math.ceil(hp / (mult * scale))
 
@@ -294,8 +421,8 @@ def run_policy(player, mon, pol, trials=1200, max_rounds=120):
     en_lost = mana = rnds = 0.0
 
     for _ in range(trials):
-        st = FightState.opening(player, mon)
-        while st.rounds < max_rounds:
+        st = start_trial(player, mon, FightState.opening(player, mon))
+        while st.rounds < max_rounds and st.p_energy > 0:
             move, arg = fn(player, mon, st)
 
             if move == "evade":
@@ -303,7 +430,7 @@ def run_policy(player, mon, pol, trials=1200, max_rounds=120):
                 if try_evade(player, mon, st):
                     fled += 1
                     break
-                _monster_swing(st, mon)
+                _monster_turns(player, mon, st)
                 if st.p_energy <= 0:
                     died += 1
                     break
@@ -312,7 +439,7 @@ def run_policy(player, mon, pol, trials=1200, max_rounds=120):
             if apply_move(player, mon, st, move, arg):
                 wins += 1
                 break
-            _monster_swing(st, mon)
+            _monster_turns(player, mon, st)
             if st.p_energy <= 0:
                 died += 1
                 break
@@ -378,7 +505,7 @@ def true_cost(player, st, r, danger):
     What a move ACTUALLY costs you.
 
     ENERGY IS YOUR HEALTH. Nothing you do spends it -- it only goes down when
-    the monster hits you (see _monster_swing). So `energy_lost` is a prediction
+    the monster hits you (see _monster_turns). So `energy_lost` is a prediction
     of how much LIFE this fight will cost, not an action cost.
 
     But health is not free either, for two reasons:
@@ -440,7 +567,8 @@ def danger_of(player, mon, st):
     """
     if st.p_energy <= 0:
         return 1.0
-    incoming = 1.0 + st.m_strength / 2.0            # its average hit
+    # its average hit, times how many hits it gets per move of yours
+    incoming = (1.0 + st.m_strength / 2.0) * hits_per_turn(player, mon, st)
     might = max(1.0, might_of(player, st) * 1.15)   # your average swing
     hp = max(1.0, st.m_energy + st.m_shield)
     rounds = hp / might
@@ -452,12 +580,30 @@ def danger_of(player, mon, st):
 
 
 # ---------------------------------------------------------------- next move
-MANA_MOVES = {"bolt", "aon", "might", "paralyze"}
+MANA_MOVES = {"bolt", "aon", "might", "paralyze", "haste", "forcefield"}
 NO_MANA_WIN = 0.95     # a no-mana plan this sure to win ...
 NO_MANA_DEATH = 0.02   # ... and this safe beats any plan that spends mana
 
 
+AON_ONLY_IF_DEATH = 0.50   # rank AoN first only if everything else is this deadly
+
+
 def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
+    """Score and rank every legal move (see _score_moves). All or Nothing is
+    never ranked first while another move gives better than even odds of
+    surviving: a failed cast doubles the monster's strength and speed (a
+    size-9 Cocodrill hit for 1551 after three failures and killed a player)."""
+    res = _score_moves(player, mon, st, trials, mana_fallback, only)
+    if only is None and res and res[0]["move"] == "aon":
+        # next move in the advisor's own ranking that's reasonably safe
+        best = next((r for r in res[1:]
+                     if r.get("death", 1.0) < AON_ONLY_IF_DEATH), None)
+        if best is not None:
+            res = [best] + [r for r in res if r is not best]
+    return res
+
+
+def _score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
     """
     Given the CURRENT fight state, score each legal move by playing the rest
     of the fight out sensibly after it. This is the 'what do I press now?'
@@ -480,7 +626,10 @@ def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
         en = 0.0
         mana = 0.0
         for _ in range(trials):
-            s = replace(st)
+            s = start_trial(player, mon, st)
+            if s.p_energy <= 0:              # killed before your first move
+                en += player.energy
+                continue
 
             if mv == "evade":
                 s.rounds += 1
@@ -489,7 +638,7 @@ def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
                     en += player.energy - s.p_energy
                     mana += st.p_mana - s.p_mana
                     continue
-                _monster_swing(s, mon)
+                _monster_turns(player, mon, s)
             else:
                 dead = apply_move(player, mon, s, mv, arg)
                 if dead:
@@ -497,7 +646,7 @@ def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
                     en += player.energy - s.p_energy
                     mana += st.p_mana - s.p_mana
                     continue
-                _monster_swing(s, mon)
+                _monster_turns(player, mon, s)
 
             # ...then finish the fight with a sane default.
             #
@@ -512,7 +661,8 @@ def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
                     # would melee kill it before it kills me?
                     swing = max(1.0, might_of(player, s) * 1.15)
                     rounds_to_kill = (s.m_energy + s.m_shield) / swing
-                    incoming = 1.0 + s.m_strength / 2.0
+                    incoming = ((1.0 + s.m_strength / 2.0)
+                                * hits_per_turn(player, mon, s))
                     dmg_taken = rounds_to_kill * incoming
                     losing = dmg_taken > s.p_energy * 0.6
 
@@ -520,12 +670,18 @@ def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
                          if losing and mana_fallback else None)
                     if n and n <= s.p_mana:
                         nxt, narg = "bolt", n
+                    elif (losing and mana_fallback and s.m_speed > 0
+                          and player.magiclvl >= ML_PARALYZE
+                          and s.p_mana >= MM_PARALYZE
+                          and not set(mon.specials) & SPELL_IMMUNE):
+                        # can't bolt it dead: hold it still for a few rounds
+                        nxt, narg = "paralyze", None
                     else:
                         nxt, narg = "melee", None
                 if apply_move(player, mon, s, nxt, narg):
                     wins += 1
                     break
-                _monster_swing(s, mon)
+                _monster_turns(player, mon, s)
             en += player.energy - max(0.0, s.p_energy)
             mana += st.p_mana - s.p_mana
 
@@ -559,8 +715,8 @@ def score_moves(player, mon, st, trials=500, mana_fallback=True, only=None):
     plain = [r["move"] for r in results if r["move"] not in MANA_MOVES]
     if plain and any(r["move"] in MANA_MOVES or r.get("mana_spent", 0) > 0
                      for r in results):
-        nm = score_moves(player, mon, st, trials=max(150, trials // 2),
-                         mana_fallback=False, only=set(plain))
+        nm = _score_moves(player, mon, st, trials=max(150, trials // 2),
+                          mana_fallback=False, only=set(plain))
         good = [r for r in nm if r["win"] >= NO_MANA_WIN
                 and r["death"] <= NO_MANA_DEATH]
         if good:
@@ -604,7 +760,7 @@ def explain(player, mon, st, moves):
     mv = top["move"]
     hp = st.m_energy + st.m_shield
     swings = math.ceil(hp / max(1.0, might_of(player, st) * 1.15))
-    incoming = 1 + st.m_strength / 2
+    incoming = (1 + st.m_strength / 2) * hits_per_turn(player, mon, st)
 
     if mv == "luckout":
         pl = (1 - mon.brains / (2 * player.brains)) if player.brains >= mon.brains \
@@ -619,12 +775,20 @@ def explain(player, mon, st, moves):
         return ("Buffing might now pays for itself — melee damage is linear in "
                 "might, and the bonus stacks and lasts the whole fight.")
     if mv == "paralyze":
-        return ("Paralyze sets its speed to -2 — it effectively stops acting. "
-                "Best mana you'll ever spend on something this dangerous.")
+        ch = min(1.0, 4000 * player.magiclvl / (st.m_experience + 6000 * player.magiclvl) + 0.1)
+        return (f"Paralyze ({ch*100:.0f}% to hold it): its speed drops to -2 and "
+                "climbs back 1 a round, so you get about 3 free rounds before it "
+                "can hit again. Skirmish wakes it up, so melee after.")
     if mv == "aon":
         ch = 3000 * player.magiclvl / (mon.experience + 10000 * player.magiclvl)
         return (f"All-or-Nothing: {ch*100:.0f}% instant kill for 1 mana. "
                 f"A miss doubles its strength and speed — but nothing else here wins.")
+    if mv == "haste":
+        return ("Haste raises your speed for the whole fight, so it wins "
+                "initiative less often and gets fewer hits on you.")
+    if mv == "forcefield":
+        return (f"Force Field soaks {20 * player.magiclvl:.0f} damage before "
+                "your energy takes any.")
     if mv == "evade":
         return (f"You lose this fight. Get out — {top['flee']*100:.0f}% to escape.")
     if mv == "melee":
@@ -638,6 +802,6 @@ def explain(player, mon, st, moves):
                 f"({st.p_energy:.0f} \u2192 ~{max(0, hp_after):.0f}). "
                 f"Degrades its strength as you go.")
     if mv == "skirmish":
-        return ("Skirmish only to slow it down for an escape — it does less "
-                "damage than melee and its speed isn't what's hurting you.")
+        return ("Skirmish wears its speed down, so it wins initiative less "
+                "often and gets fewer hits on you; it does less damage than melee.")
     return ""

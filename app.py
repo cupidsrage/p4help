@@ -39,6 +39,7 @@ from combat import (Player, Monster, advise, aon_chance, luckout_chance,
 import monsters as MDB
 import quests as Q
 import trove as TR
+import rules as RU
 import zones as ZN
 import reroll as RR
 import statsync as SS
@@ -157,6 +158,11 @@ class Tracker:
         self.p = Player()
         self.name = ""
         self.gold = 0
+        self.gems = 0.0
+        self.amulets = None        # unknown until the server says
+        self.charms = None
+        self.cloaked = False
+        self.cls = ""              # class, from "Name the Fighter"
         self.location = ""
         self.pending = None
         self.awaiting_count = False
@@ -168,7 +174,6 @@ class Tracker:
         self.trove = None
         self.xy = None
         self.solver = TR.TroveSolver()
-        self.search = None      # TroveSearch, once we have an estimate
         self.search = None      # TroveSearch, once we have an estimate
         self.cur = None            # current monster dict
         self.cur_mon = None        # Monster object
@@ -189,7 +194,16 @@ class Tracker:
 
     # ---------- packet framing ----------
     def feed(self, text):
-        for line in text.split("\n"):
+        # Network chunks can end anywhere, including mid-line or right after
+        # a packet header. Only complete lines are parsed; the unfinished
+        # tail waits for the next chunk. (Before, the empty piece after a
+        # chunk's final newline was parsed as a line too, and could be
+        # taken as the text of a header that ended the chunk -- losing e.g.
+        # "You are attacked by ...".)
+        data = getattr(self, "_partial", "") + text
+        lines = data.split("\n")
+        self._partial = lines.pop()
+        for line in lines:
             self._line(line)
         # Recompute fight advice once per batch of server data, not once per
         # damage line: a round's "You hit..." and "...hit you" usually arrive
@@ -262,6 +276,14 @@ class Tracker:
             p.level = v
         elif hdr == GOLD:
             self.gold = v
+        elif hdr == GEMS:
+            self.gems = v
+        elif hdr == AMULETS:
+            self.amulets = v
+        elif hdr == CHARMS:
+            self.charms = v
+        elif hdr == CLOAK:
+            self.cloaked = (lines[0].strip().lower() == "yes") if lines else False
         elif hdr == NAME:
             name = lines[0].strip() if lines else ""
             if name and name != self.name:
@@ -282,8 +304,10 @@ class Tracker:
                     pass
                 self.location = f"{lines[2].strip()} ({lines[0].strip()},{lines[1].strip()})"
                 # tick off this square in the trove sweep
-                if self.search and self.xy:
-                    self.search.visit(*self.xy)
+                if self.xy:
+                    self.solver.visit(*self.xy)
+                    if self.search:
+                        self.search.visit(*self.xy)
                 self.push_trove()
                 self.push_zone()
         elif hdr == RING:
@@ -302,6 +326,8 @@ class Tracker:
             # Some endings print nothing we recognise (a Kobold stealing gold
             # and running off), which left a stale fight that froze auto-play.
             low = {b.lower() for b in labels}
+            if self.fs is not None and "melee" in low and self._wake():
+                self._advice_dirty = True   # paralysis wore off a little
             if (self.cur is not None and "melee" not in low and "rest" in low
                     and ("move to" in low or "hunt" in low)):
                 self.end_fight()
@@ -336,13 +362,21 @@ class Tracker:
         digit plus data; a button click is "1" + its 0-based position, e.g.
         "12" = third button (seen in recordings). Used to learn which class
         was clicked on the class menu."""
+        i = click_index(text)
+        with LOCK:
+            labels = list(STATE.get("buttons") or [])
+        clicked = labels[i] if i is not None and i < len(labels) else None
+        if clicked:
+            self.last_click = clicked
         cf = getattr(self, "cal_fight", None)
-        if cf is not None:
-            i = click_index(text)
-            with LOCK:
-                labels = list(STATE.get("buttons") or [])
-            if i is not None and i < len(labels):
-                cf["clicked"].append(labels[i])
+        if cf is not None and clicked:
+            cf["clicked"].append(clicked)
+        # All or Nothing cast: it can only be tried once per fight, and the
+        # server shows a failure as "You hit X for 0 damage!" (no "grows
+        # stronger" message), so the tracker must remember the cast itself.
+        if clicked and clicked.strip().lower() == "all or nothing" and self.fs is not None:
+            self.fs.aon_spent = True
+            self.aon_pending = True
         menu = self.class_menu
         if not menu:
             return
@@ -389,8 +423,10 @@ class Tracker:
         m = re.search(r"energy\s*:\s*([\d.]+)\s*\(\s*([\d.]+)\s*\+\s*([\d.]+)\s*shield", low)
         if m:
             self.p.energy = float(m.group(1))
-            self.p.max_energy = float(m.group(2))
+            # "Energy: 1088 (477 + 836 shield)": the energy bar's max is
+            # 477 + 836, so keep max_energy as the total like packet 42 does
             self.p.shield = float(m.group(3))
+            self.p.max_energy = float(m.group(2)) + self.p.shield
         m = re.search(r"^\s*level\s*:\s*([\d.]+)", low)
         if m:
             self.p.level = float(m.group(1))
@@ -414,6 +450,16 @@ class Tracker:
         m = re.search(r"^\s*gold\s*:\s*([\d.]+)", low)
         if m:
             self.gold = float(m.group(1))
+        m = re.search(r"^\s*(gems|amulets|charms)\s*:\s*([\d.]+)", low)
+        if m:
+            setattr(self, m.group(1), float(m.group(2)))
+        m = re.search(r"^\s*cloaked\s*:\s*(yes|no)", low)
+        if m:
+            self.cloaked = m.group(1) == "yes"
+        m = re.match(r"^\s*\S.* the (magic-user|fighter|elf|dwarf|halfling|experimento)\s*$",
+                     low)
+        if m:
+            self.cls = m.group(1)
 
         # ---- quests (trading post) ----
         r = Q.parse_rerolls(txt)
@@ -473,46 +519,52 @@ class Tracker:
                 STATE["session"]["quests"] += 1
                 STATE["session"]["quest_gold"] += gold
 
-        # ---- treasure trove scrolls ----
+        # ---- treasure trove maps ----
+        # Every map points at the same single trove from where it's read
+        # (treasure.c), so each one narrows down the same spot.
         if any(k in low for k in TR.SCROLL_MARKERS):
-            t = TR.parse_scroll(txt, origin=self.xy)
+            pos = self.xy
+            one = TR.ONE_SQUARE_RE.search(txt)
+            t = TR.parse_scroll(txt, origin=pos)
+            if one and pos:
+                t = TR.Trove(1, one.group(1).lower(), pos, txt.strip())
             if t:
                 if self.trove:
                     t.leg = self.trove.leg + 1
                 self.trove = t
-                # Feed the reading to the triangulator. The scroll's DIRECTION is
-                # exact but its DISTANCE is fudged +/-12.5% (treasure.c:1584), so
-                # a single scroll can't pinpoint it -- but several can.
-                pos = self.xy or t.origin
-                if pos:
-                    # avoid logging two readings at the exact same coordinates --
-                    # that adds no triangulation info. Only skip if identical.
-                    dup = any(abs(rx - pos[0]) < 1 and abs(ry - pos[1]) < 1
-                              for rx, ry, *_ in self.solver.readings)
-                    if not dup:
-                        self.solver.add(pos[0], pos[1], t.distance, t.direction)
-                    else:
-                        self.note("TROVE scroll read at the SAME spot as the last "
-                                  "one - move before reading to triangulate.")
-                    est = self.solver.estimate(step=12)
-                    if est:
-                        self.note(f"TROVE scroll {est['readings']}: "
-                                  f"{t.distance} sq {t.direction} -> best guess "
-                                  f"({est['x']}, {est['y']}) +/-{est['uncertainty']:.0f}")
-                        # start (or recenter) the on-foot sweep box
-                        rad = max(6, int(est["uncertainty"]))
-                        if self.search is None:
-                            self.search = TR.TroveSearch(est["x"], est["y"], rad)
-                            self.note(f"SEARCH BOX: {self.search.total_squares()} "
-                                      f"squares to sweep around "
-                                      f"({est['x']}, {est['y']})")
-                        else:
-                            self.search.recenter(est["x"], est["y"], rad)
+            if not pos:
+                self.note("TROVE map read but position unknown - move one "
+                          "square so the game reports your location.")
+            elif one:
+                self.solver.add_exact(pos[0], pos[1], one.group(1).lower())
+            elif t:
+                dup = any(abs(rx - pos[0]) < 1 and abs(ry - pos[1]) < 1
+                          for rx, ry, *_ in self.solver.readings)
+                if dup:
+                    self.note("TROVE map read at the SAME spot as the last one - "
+                              "it adds nothing. Read the next one somewhere else.")
                 else:
-                    self.note("TROVE scroll read but position unknown - "
-                              "move one square so the game reports your location, "
-                              "then it can triangulate.")
-                self.push_trove()
+                    self.solver.add(pos[0], pos[1], t.distance, t.direction)
+            if pos and t:
+                est = self.solver.estimate()
+                if est:
+                    self.note(f"TROVE map {est['readings']}: {t.distance} sq "
+                              f"{t.direction} -> {est['squares']:,} squares left, "
+                              f"middle ({est['x']}, {est['y']})")
+                    if est["squares"] <= TR.SWEEP_MAX:
+                        if self.search is None:
+                            self.search = TR.TroveSearch(self.solver.cands)
+                            self.note(f"SWEEP: {est['squares']:,} squares to walk")
+                        else:
+                            self.search.update(self.solver.cands)
+                elif self.solver.readings:
+                    self.note("TROVE maps disagree (was the trove dug up and "
+                              "re-hidden?) - starting over from this map.")
+                    self.solver = TR.TroveSolver()
+                    self.search = None
+                    if not one:
+                        self.solver.add(pos[0], pos[1], t.distance, t.direction)
+            self.push_trove()
 
         if any(k in low for k in TR.FOUND_MARKERS):
             if self.trove:
@@ -586,10 +638,26 @@ class Tracker:
             m = re.search(r"you hit .*? for ([\d.]+) damage", low)
             if m:
                 dmg = float(m.group(1))
-                self.fs.m_shield -= dmg
-                if self.fs.m_shield < 0:
-                    self.fs.m_energy += self.fs.m_shield
-                    self.fs.m_shield = 0.0
+                fs = self.fs
+                fs.m_shield -= dmg
+                if fs.m_shield < 0:
+                    fs.m_energy += fs.m_shield
+                    fs.m_shield = 0.0
+                # what the hit does besides damage (fight.c Do_playerhits)
+                how = (getattr(self, "last_click", "") or "").strip().lower()
+                max_e = max(1.0, fs.m_max_energy)
+                if how == "melee":
+                    fs.melee_dmg += dmg
+                    fs.m_strength = (fs.m_max_strength - (fs.melee_dmg / max_e)
+                                     * (fs.m_max_strength / 3.0))
+                elif how == "skirmish":
+                    fs.skirm_dmg += dmg
+                    fs.m_speed = (fs.m_max_speed - (fs.skirm_dmg / max_e)
+                                  * (fs.m_max_speed / 3.0))
+                elif how == "nick":
+                    fs.m_max_speed += 2.0
+                    fs.m_speed = 0.0 if fs.m_speed < 0 else fs.m_speed + 2.0
+                    fs.m_experience -= fs.m_experience // 10
                 changed = True
 
             # "A Kobold hit you for 10 damage!"
@@ -597,9 +665,12 @@ class Tracker:
                 self.cal_fight["out"].append(dmg)
             if "hit you for" in low:
                 changed = True
+                self._wake()           # each pass of the server loop
                 mh = re.search(r"hit you for ([\d.]+) damage", low)
-                if mh and getattr(self, "cal_fight", None):
-                    self.cal_fight["in"].append(float(mh.group(1)))
+                cf = getattr(self, "cal_fight", None)
+                if mh and cf:
+                    # with the damage you'd dealt by then (melee wears it down)
+                    cf["in"].append((float(mh.group(1)), sum(cf["out"])))
 
             # luckout resolved
             if "you blew it" in low and getattr(self, "cal_fight", None):
@@ -612,16 +683,25 @@ class Tracker:
                 self.note("luckout FAILED — falling back")
                 changed = True
 
-            # AoN failed: it doubles strength and speed
-            if "you blew it" not in low and (
-                    "grows stronger" in low or "gets stronger" in low):
-                self.fs.m_strength *= 2.0
-                self.fs.m_speed *= 2.0
-                self.fs.aon_spent = True
+            # AoN failed: it doubles strength and speed. On this server the
+            # only sign is "You hit X for 0 damage!" right after the cast.
+            aon_zero = (getattr(self, "aon_pending", False)
+                        and re.search(r"you hit .*? for 0 damage", low))
+            if aon_zero or ("you blew it" not in low and (
+                    "grows stronger" in low or "gets stronger" in low)):
+                self.aon_pending = False
+                fs = self.fs
+                fs.m_max_strength *= 2.0
+                fs.m_strength = fs.m_max_strength
+                fs.m_max_speed *= 2.0
+                fs.m_speed = fs.m_speed * 2.0 if fs.m_speed * 2.0 > 1 else fs.m_speed + 1
+                fs.aon_spent = True
                 self.note("AoN FAILED — it doubled str + speed")
                 changed = True
 
-            if "paralyzed" in low or "cannot move" in low:
+            # Paralyze worked ("A Troll is held."): its speed is set to -2
+            # and climbs back by 1 every pass of the fight loop.
+            if low.rstrip().endswith(" is held."):
                 self.fs.m_paralyzed = True
                 self.fs.m_speed = -2.0
                 changed = True
@@ -671,6 +751,17 @@ class Tracker:
                 or "it wandered off" in low or "you got away" in low):
             self.end_fight()
 
+    def _wake(self):
+        """Start of a pass of the server's fight loop: a paralyzed monster's
+        speed climbs back by 1 (fight.c)."""
+        fs = self.fs
+        if fs is None:
+            return False
+        old = fs.m_speed
+        fs.m_speed = min(fs.m_speed + 1.0, fs.m_max_speed)
+        fs.m_paralyzed = fs.m_speed <= 0
+        return fs.m_speed != old
+
     # ---------- fight lifecycle ----------
     def encounter(self, name, size, flock):
         d = MDB.scaled(name, size)
@@ -688,6 +779,7 @@ class Tracker:
 
         self.cur_mon = m
         self.fs = FightState.opening(self.p, m)
+        self.aon_pending = False
 
         warn = list(MDB.notes_for(d))
         if (er, sr) != (1.0, 1.0):
@@ -698,6 +790,12 @@ class Tracker:
         self.max_size_seen = max(self.max_size_seen, size)
         if not self.have_magic:
             warn.insert(0, "Brains/Magic Level unknown — open Info → Stats.")
+        tr_type = MDB.MONSTERS[name][5]
+        if (self.trove is not None and tr_type == RU.MAP_TREASURE_TYPE
+                and RU.map_eligible(self.p.level, self.gems)):
+            pm = RU.map_chance_per_kill(tr_type, size)
+            warn.insert(0, f"Drops trove maps: ~{pm*100:.0f}% chance of a map "
+                           "if you kill it.")
 
         self.cur = {
             "name": d["name"], "size": size, "flock": flock,
@@ -705,6 +803,8 @@ class Tracker:
             "brains": d["brains"], "base_brains": MDB.MONSTERS[name][1],
             "experience": d["experience"], "speed": d["speed"],
             "warnings": warn,
+            "treasure": RU.treasure_drop_chance(
+                tr_type, size, unicorn="U" in d["specials"]),
             "luckout": luckout_chance(self.p, m),
             "aon": aon_chance(self.p, m),
             "bolt": bolt_plan(self.p, m),
@@ -848,11 +948,14 @@ class Tracker:
                 STATE["trove"] = None
                 return
             d = self.trove.to_dict(self.xy)
+            d["map_monsters"] = self.map_monsters()
+            d["maps_ok"] = RU.map_eligible(self.p.level, self.gems)
+            d["cloaked"] = self.cloaked
             if self.search:
                 d["search"] = self.search.to_dict(self.xy)
-            est = self.solver.estimate(step=12)
+            est = self.solver.estimate()
             if est:
-                d["solved"] = est
+                est = d["solved"] = dict(est)
                 if self.xy:
                     dx = est["x"] - self.xy[0]
                     dy = est["y"] - self.xy[1]
@@ -877,7 +980,50 @@ class Tracker:
                 "poison": self.poison,
                 # stat sheet read since the last fight ended (poison is current)
                 "stats_fresh": self.stats_at > 0 and self.stats_at >= self.fight_end_at,
+                "gems": self.gems, "amulets": self.amulets, "charms": self.charms,
+                "cloaked": self.cloaked, "cls": self.cls,
+                "circle": self.circle(),
+                "notes": self.notes(),
             }
+
+    def circle(self):
+        return ZN.circle_of(*self.xy) if self.xy else None
+
+    def notes(self):
+        """Short reminders from the game's own rules, shown on the panel."""
+        p, out = self.p, []
+        loss = RU.gold_speed_loss(self.gold, self.gems, p.level, self.cls)
+        limit = RU.gold_limit(self.gems, p.level, self.cls)
+        if loss > 0:
+            out.append(f"Gold is slowing you: -{loss:.1f} speed. Bank or spend "
+                       f"down to {limit:,.0f} gold.")
+        elif self.gold and self.gold > 0.85 * limit:
+            out.append(f"Gold {self.gold:,.0f}: over {limit:,.0f} starts "
+                       "slowing you down.")
+        if self.trove is not None:
+            if not RU.map_eligible(p.level, self.gems):
+                out.append(f"No more trove maps: level {p.level:.0f} is over "
+                           f"100 - gems ({100 - self.gems:.0f}).")
+            else:
+                names = self.map_monsters()
+                if names:
+                    out.append("Trove maps drop from: " + ", ".join(names[:4])
+                               + (" ..." if len(names) > 4 else ""))
+            if self.cloaked and self.search is not None:
+                out.append("You can't find the trove while cloaked.")
+        return out
+
+    def map_monsters(self, circle=None):
+        """Monsters that can spawn here and drop scrolls (trove maps)."""
+        c = circle or self.circle()
+        if not c:
+            return []
+        seen = []
+        for i in ZN.monster_pool(c):
+            name = ZN.IDS[i]
+            if MDB.MONSTERS[name][5] == RU.MAP_TREASURE_TYPE and name not in seen:
+                seen.append(name)
+        return seen
 
 
 # ---------- web server ----------

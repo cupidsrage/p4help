@@ -6,8 +6,10 @@ Base stats as listed. In-game a monster's actual stats are scaled by its SIZE
     energy     *= size
     brains     *= size
     experience *= size
-    strength   *= 1 + 0.5*(size-1)   [+50% per size over one]
-    speed      rises very slowly with size
+    strength   *= 1 + size/2
+    energy     is randomised 90%..110%
+    speed      does NOT change with size
+(fight.c, Do_monster)
 """
 
 # name -> (strength, brains, speed, energy, experience, treasure, flock%, special)
@@ -162,9 +164,9 @@ def scaled(name, size=1):
     return {
         "name": name,
         "size": size,
-        "strength": st * (1 + 0.5 * (size - 1)),
+        "strength": st * (1 + size / 2.0),
         "brains": br * size,
-        "speed": sp,          # "very slowly" increases; treat as flat
+        "speed": sp,          # not scaled by size
         "energy": en * size,
         "experience": xp * size,
         "treasure": tr,

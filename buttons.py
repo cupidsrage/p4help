@@ -39,6 +39,7 @@ import urllib.error
 
 import reroll
 from statsync import is_treasure
+import rules as RU
 
 POLL_URL = "http://127.0.0.1:8420/state"
 POLL_MS = 150     # how often to read the proxy's state (local, cheap)
@@ -70,6 +71,7 @@ SAFE_MAX_DEATH = 0.02     # advisor's move kills you more often than this -> saf
 GROUP_RESERVE = 0.50      # in a group, don't let a fight leave you below this of max energy
 LOW_ENERGY = 0.30         # below this of max energy, take the safest move ...
 SURE_WIN = 0.97           # ... unless the fight is this close to certain
+AON_ONLY_IF_DEATH = 0.50  # cast All or Nothing only if everything else is this deadly
 
 BG    = "#16130e"
 PANEL = "#211c14"
@@ -105,6 +107,7 @@ MOVE_TO_BUTTON = {
     "aon":      ("Spell", 4, ("All or Nothing", 1)),
     "might":    ("Spell", 4, ("Increase Might", None)),
     "paralyze": ("Spell", 4, ("Paralyze", None)),
+    "haste":    ("Spell", 4, ("Haste", 4)),
     "forcefield": ("Spell", 4, ("Force Field", 5)),
 }
 
@@ -505,6 +508,16 @@ class ButtonOverlay:
         def pick(m, why):
             return dict(m, safety=why) if m is not top else top
 
+        # All or Nothing is a gamble: failing doubles the monster's strength
+        # and speed (a size-9 Cocodrill went from ~200 to 1551 damage after
+        # three failed casts and killed the player). Only gamble when every
+        # other move is at least AON_ONLY_IF_DEATH likely to get you killed.
+        if top.get("move") == "aon":
+            # next move in the advisor's ranking that's reasonably safe
+            alt = next((m for m in moves[1:] if m.get("move") != "aon"
+                        and death(m) < AON_ONLY_IF_DEATH), None)
+            if alt is not None:
+                return dict(alt, safety="All or Nothing is too risky here")
         if death(top) > SAFE_MAX_DEATH and death(safest) < death(top):
             return pick(safest, f"{death(top)*100:.0f}% death risk")
         if mx:
@@ -602,10 +615,23 @@ class ButtonOverlay:
             self._cfg(self.hint, text="Treasure: checking for poison\u2026", fg=INK)
             self._cfg(self.sub, text="reading your stats after that fight")
             return True
+        amulets, charms = p.get("amulets"), p.get("charms")
+        circle = p.get("circle")
+        covered = (amulets is not None and circle
+                   and RU.curse_covered(amulets, charms, circle))
         if poison is None:
             want, why = "yes", "poison unknown, no sign of it"
+        elif poison > 0 and covered:
+            # A curse is the only danger in treasure (8% for items); your
+            # amulets (or a charm) absorb it, so poison doesn't matter.
+            want, why = "yes", (f"poisoned ({poison:g}) but {amulets:g} amulets "
+                                f"cover a curse (uses {RU.curse_cost(circle)})"
+                                if amulets >= RU.curse_cost(circle) else
+                                f"poisoned ({poison:g}) but a charm covers a curse")
         elif poison > 0:
-            want, why = "no", f"poisoned ({poison:g})"
+            want, why = "no", (f"poisoned ({poison:g}), amulet count not known yet"
+                               if amulets is None else
+                               f"poisoned ({poison:g}), not enough amulets to stop a curse")
         else:
             want, why = "yes", "not poisoned" + ("" if fresh else " (last check)")
         num = low.index(want) + 1
@@ -651,6 +677,23 @@ class ButtonOverlay:
             self._rest_stopped = None           # energy went up: try again
             self._rest_last_e, self._rest_stalls = None, 0
 
+        # Exact rest maths from the server: each rest adds a fixed amount
+        # and poison takes a fixed amount back.
+        target, net, need = RU.rest_target(
+            e, mx, p.get("shield") or 0, p.get("level") or 0, poison, p.get("cls"))
+        if poison > 0 and need == 0:
+            self._cfg(self.hint, text=f"Energy {e:g}/{mx:g}: rested as far as poison allows",
+                      fg=AMBER)
+            self._cfg(self.sub, text=f"poison {poison:g} takes {mx - target:.0f} back "
+                                     "after every rest; cure it to get higher")
+            return True
+        if poison > 0 and need is None:
+            self._cfg(self.hint, text=f"Energy {e:g}/{mx:g}: resting can't help",
+                      fg=AMBER)
+            self._cfg(self.sub, text=f"poison {poison:g} drains more than a rest "
+                                     f"heals ({net:+.0f} per rest); find a medic")
+            return True
+
         col = GREEN if self._flash else GREEN_HI
         self._light(num, col, GREEN_HI)
         if self._press_key(num, ("rest", e), repeat_s=REST_REPEAT_S):
@@ -665,7 +708,8 @@ class ButtonOverlay:
             if self._rest_stalls >= (1 if poison > 0 else REST_STALLS):
                 self._rest_stopped = self._rest_last_e
         self._cfg(self.hint, text=f"Rest \u2192 button {num}", fg=GREEN_HI)
-        self._cfg(self.sub, text=f"energy {e:g}/{mx:g}"
+        left = f" \u00b7 ~{need} rest{'s' if need != 1 else ''} to {target:.0f}" if need else ""
+        self._cfg(self.sub, text=f"energy {e:g}/{mx:g}{left}"
                                 + (f" \u00b7 poisoned {poison:g}" if poison > 0 else ""))
         return True
 

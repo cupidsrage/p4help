@@ -55,7 +55,11 @@ class ScreenModel:
         self.loose = False       # inside an unknown packet: keep its text
 
     def feed(self, text):
-        for line in text.split("\n"):
+        # parse complete lines only; keep an unfinished tail for next time
+        data = getattr(self, "_partial", "") + text
+        lines = data.split("\n")
+        self._partial = lines.pop()
+        for line in lines:
             self._line(line.rstrip("\r"))
 
     def _add_text(self, txt, loose=False):

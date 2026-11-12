@@ -27,6 +27,12 @@ panel docked on the right. Close the window and everything shuts down.
   game for you: combat moves, the Spell → Magic Bolt → mana steps, and "More"
   prompts. It only types while the launcher window is in front, so alt-tabbing
   away pauses it. It's off by default and remembers your choice.
+- **Bestiary:** click **Bestiary** (or run `python bestiary.py`) to simulate fights
+  against every monster at sizes 1-10 with your current stats: best move, win /
+  death chance, energy and mana cost, and a verdict (FREE KILL / SAFE / RISKY /
+  FLEE / DEADLY) per monster and size. It also re-runs everything with each stat
+  raised to show **which stat makes you safest**. Opens `bestiary.html`; runs as a
+  separate program (~30 s) so the game doesn't lag.
 - **Learns real monster numbers:** the 4.03 tables may over- or under-state
   monsters on this server, especially big sizes. After every fight you win by
   damage (not luckout/spells) it compares what the monster really took and dealt
@@ -178,6 +184,7 @@ turns unspendable mana into hundreds of damage.
 - `launcher.py` — the all-in-one app window (run this, or `Phantasia.bat`)
 - `app.py` — proxy + web server + packet parser
 - `statsync.py` — quietly keeps the Info → Stats data current
+- `bestiary.py` — simulates every monster with your stats; what stats do what
 - `calibrate.py` — learns real monster energy/strength per size from your fights
 - `reroll.py` — scores character rolls and decides Reroll/Keep
 - `recorder.py` — records screens + your inputs; `analyze.py` — summarises them
