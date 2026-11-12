@@ -1112,24 +1112,36 @@ class Tracker:
         return out + later
 
     def shop_advice(self):
-        """Best buys for the gold you carry (cached; a few ms to compute)."""
+        """Best buys for the gold you carry. Simulating them takes a second
+        or two, so it runs on a background thread; this returns the latest
+        answer and starts a new calculation when gold or stats change."""
         p = self.p
         circle = self.circle()
         if not circle or not p.max_energy or self.gold < 500:
             return None
         key = (round(self.gold, -2), p.level, round(p.quickness), round(p.shield),
                round(p.sword), round(p.strength), circle, self.quicksilver)
-        if key != self._shop_key:
+        if key != self._shop_key and not getattr(self, "_shop_busy", False):
             self._shop_key = key
-            try:
-                import shop as SH
-                full = Player(**{**vars(p), "energy": p.max_energy})
-                buys = SH.best_buys(full, self.cls, self.gold, circle,
-                                    self.quicksilver, self.xy[0] if self.xy else None)
-                self._shop = [b for b in buys if b["risk_cut"] > 0.001] or None
-            except Exception:
-                self._shop = None
+            self._shop_busy = True
+            full = Player(**{**vars(p), "energy": p.max_energy})
+            args = (full, self.cls, self.gold, circle, self.quicksilver,
+                    self.xy[0] if self.xy else None)
+            threading.Thread(target=self._shop_worker, args=args, daemon=True).start()
         return self._shop
+
+    def _shop_worker(self, *args):
+        try:
+            import shop as SH
+            buys = SH.best_buys(*args)
+            self._shop = [b for b in buys if b["risk_cut"] > 0.001] or None
+        except Exception as e:
+            print(f"  ! shop advice failed: {e}", file=sys.stderr)
+        finally:
+            self._shop_busy = False
+            self._shop_ver = getattr(self, "_shop_ver", 0) + 1
+            self._notes_key = None          # show the new advice
+            self.push()
 
     def map_monsters(self, circle=None):
         """Monsters that can spawn here and drop scrolls (trove maps)."""

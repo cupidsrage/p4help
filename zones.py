@@ -26,13 +26,18 @@ MONSTER SELECTION BY CIRCLE (fight.c:80-130):
 ROLL(base, interval) = base + interval*rnd(), so it's a uniform range.
 
 SIZE scales with circle too, which is what really kills you -- a monster's
-energy/brains/experience are multiplied by size, and strength by 1+0.5*(size-1).
+energy/brains/experience are multiplied by size, and strength by 1+size/2.
+
+Each circle is scored by simulating encounters with every monster that
+spawns there, with the advisor's fight engine (planner.py), including
+friends joining after a kill (flock %).
 """
 
 import math
+import time
 import monsters as MDB
 from combat import Player, Monster
-from planner import FightState, score_moves, danger_of
+from planner import FightState, score_moves, danger_of   # noqa: F401
 
 D_CIRCLE = 125.0
 
@@ -103,116 +108,169 @@ def typical_size(circle):
     return max(1, circle)
 
 
+SIM_TRIALS = 100        # simulated encounters per monster per circle
+SESSION = 20            # "survive 20": encounters in a hunting session
+SAFE_DEATH = 0.02       # above this, auto-play starts spending mana
+MAX_CHAIN = 8           # most friends that can join one encounter here
+_CACHE = {}
+
+
+def _auto_policy(use_mana):
+    """Roughly what auto-play does: luckout first, then melee; when melee is
+    losing the race, bolt it dead (if allowed and affordable) or run."""
+    from planner import might_of, hits_per_turn, _bolt_to_kill
+
+    def pick(player, mon, st):
+        if not st.luckout_spent and "Mo" not in mon.specials:
+            return "luckout", None
+        swings = (st.m_energy + st.m_shield) / max(1.0, might_of(player, st) * 1.15)
+        incoming = (1.0 + st.m_strength / 2.0) * hits_per_turn(player, mon, st)
+        if incoming * swings > st.p_energy * 0.8:
+            if use_mana:
+                n = _bolt_to_kill(player, st, mon)
+                if n and n <= st.p_mana:
+                    return "bolt", n
+            return "evade", None
+        return "melee", None
+    return pick
+
+
+def _fight(player, mon, st, pick):
+    """Play one fight out. Returns 'win', 'flee' or 'death'."""
+    from planner import apply_move, try_evade, _monster_turns
+    while st.rounds < 120 and st.p_energy > 0:
+        mv, arg = pick(player, mon, st)
+        if mv == "evade":
+            st.rounds += 1
+            if try_evade(player, mon, st):
+                return "flee"
+            _monster_turns(player, mon, st)
+            continue
+        if apply_move(player, mon, st, mv, arg):
+            return "win"
+        _monster_turns(player, mon, st)
+    return "death"
+
+
+def simulate_encounter(player, mon, flock, use_mana, trials=SIM_TRIALS):
+    """Simulated encounters with one monster, from full energy, the way the
+    server runs them: it may hit before your first move, and after every
+    kill another one joins with its flock chance (fight.c), fought on the
+    energy you have left. Returns death / flee chance, exp, energy lost and
+    fights per encounter."""
+    import random
+    from planner import FightState, start_trial
+    pick = _auto_policy(use_mana)
+    deaths = fled = 0
+    xp = lost = fights = 0.0
+    for _ in range(trials):
+        energy, mana, chain = player.energy, player.mana, 0
+        while True:
+            st = FightState.opening(player, mon)
+            st.p_energy, st.p_mana, st.pre_roll = energy, mana, True
+            st = start_trial(player, mon, st)
+            res = "death" if st.p_energy <= 0 else _fight(player, mon, st, pick)
+            energy, mana = st.p_energy, st.p_mana
+            fights += 1
+            if res == "death":
+                deaths += 1
+                break
+            if res == "flee":          # running cancels the monster: no friends
+                fled += 1
+                break
+            xp += mon.experience
+            chain += 1
+            if chain >= MAX_CHAIN or random.random() >= flock / 100.0:
+                break
+        lost += player.energy - max(0.0, energy)
+    return {"death": deaths / trials, "flee": fled / trials, "exp": xp / trials,
+            "lost": lost / trials, "fights": fights / trials}
+
+
 def evaluate_circle(player, circle, sample=None):
     """
-    Score a circle for this player: how dangerous, how rewarding, how survivable.
+    Score a circle for this player by SIMULATING encounters with every
+    monster that spawns there (weighted by how often each spawns), using the
+    same fight engine as the advisor. A monster that's risky without mana is
+    re-simulated with Magic Bolt allowed, like auto-play would play it.
     """
+    import random
+    import rules as RU
+    from collections import Counter
+
     pool = monster_pool(circle)
     if not pool:
         return None
     size = typical_size(circle)
+    key = (round(player.max_energy, -1), round(player.strength), round(player.quickness, 1),
+           round(player.brains), round(player.magiclvl), round(player.mana, -1),
+           player.sword, round(player.level), getattr(player, "blessing", False), circle)
+    if key in _CACHE:
+        return dict(_CACHE[key])
 
-    seen = {}
-    for mid in pool:
+    full = Player(**{**vars(player), "energy": player.max_energy})
+    state = random.getstate()
+    random.seed(f"zone|{circle}")          # same dice every time: stable advice
+    weights = Counter(pool)
+    tot_w = sum(weights.values())
+    p_death = p_flee = exp = lost = fights = 0.0
+    deadly, monsters, lethal_w = [], 0, 0.0
+    for mid, w in weights.items():
         nm = IDS[mid]
-        if nm in seen:
-            continue
-        seen[nm] = True
-
-    dangers, exps, wins, deadly = [], [], [], []
-
-    for nm in seen:
         d = MDB.scaled(nm, size)
         if not d:
             continue
         m = Monster(name=d["name"], strength=d["strength"], brains=d["brains"],
                     speed=d["speed"], energy=d["energy"], shield=0.0,
                     experience=d["experience"], specials=tuple(d["specials"]))
-        st = FightState.opening(player, m)
-        dg = danger_of(player, m, st)
-        dangers.append(dg)
-        exps.append(d["experience"])
-        if dg > 0.75:
-            deadly.append((nm, dg))
-
-    if not dangers:
+        time.sleep(0.001)      # runs on a background thread: let the proxy in
+        r = simulate_encounter(full, m, d["flock"], use_mana=False)
+        if r["death"] > SAFE_DEATH and full.magiclvl >= 5 and full.mana > 0:
+            r2 = simulate_encounter(full, m, d["flock"], use_mana=True)
+            if r2["death"] < r["death"]:
+                r = r2
+        f = w / tot_w
+        monsters += 1
+        p_death += f * r["death"]
+        p_flee += f * r["flee"]
+        exp += f * r["exp"]
+        lost += f * r["lost"]
+        fights += f * r["fights"]
+        if r["death"] > 0.05:
+            lethal_w += f
+            deadly.append((nm, r["death"]))
+    random.setstate(state)
+    if not monsters:
         return None
 
-    avg_danger = sum(dangers) / len(dangers)
-    # "lethal" now means genuinely threatening (>0.45), not just near-certain
-    # death (>0.75). A monster at danger 0.5 still kills you often enough to end
-    # a session -- the autobattler proved this by dying to a Killmoulis the old
-    # threshold rated safe.
-    lethal_frac = len([d for d in dangers if d > 0.45]) / len(dangers)
-    worst_danger = max(dangers)
-
-    # ---- EXPECTED experience, not average ----
-    # The naive average is dragged UP by the very monsters that kill you (Ogres
-    # and Jubjub Birds have huge exp). You don't bank exp from a fight you die
-    # in. So weight each monster's exp by the chance you actually survive it.
-    exp_earned = 0.0
-    for dg, xp in zip(dangers, exps):
-        p_survive = max(0.0, 1.0 - dg)
-        exp_earned += xp * p_survive
-    exp_per_fight = exp_earned / len(exps)
-
-    # raw average, kept for display only
-    avg_exp = sum(exps) / len(exps)
-
-    # ---- SURVIVAL OVER A SESSION ----
-    # This is the thing the old formula missed entirely. You don't fight once,
-    # you fight many times, and death is ABSORBING -- one bad roll ends the run.
-    # At 13% lethal, surviving 20 fights is 0.87^20 = 6%. That is not a
-    # "survivable" zone, it is a coin-flip you lose.
-    SESSION = 20
-    # Per-fight death risk. danger_of() reports risk at CURRENT health; a fresh
-    # fight from full is much safer than that number suggests, because you rest
-    # between fights. So the real per-fight death chance is only a fraction of
-    # raw danger -- but the tail matters, so we keep a worst-case term small.
-    mean_danger = sum(dangers) / len(dangers)
-    # empirically (from autobattle) a monster at danger d kills you from full
-    # roughly d^2 of the time -- squaring reflects that you start each fight rested
-    p_death_per_fight = sum(d * d for d in dangers) / len(dangers)
-    p_death_per_fight = 0.8 * p_death_per_fight + 0.2 * (worst_danger ** 2)
-    p_survive_session = (1.0 - p_death_per_fight) ** SESSION
-
-    # ---- score ----
-    # Expected exp banked over a session, given you might not finish it.
-    # Dying is catastrophic: it costs a life and everything you were carrying.
-    # ---- EXPERIENCE PER TURN ----
-    # Every turn ages you, and every 750 age costs stats for good, so what
-    # matters is experience per TURN, not per fight. A fight costs about two
-    # turns (the Hunt and the fight), plus the rests to heal what it took.
-    # danger = d means expected damage / your energy = d / (1 - d).
-    import rules as RU
-    gain = max(1.0, RU.rest_gain(player.max_energy, player.level))
-    turns = 0.0
-    for dg in dangers:
-        dmg = min(dg, 0.95) / (1 - min(dg, 0.95)) * max(1.0, player.energy)
-        turns += 2.0 + dmg / gain
-    turns_per_fight = turns / len(dangers)
-    exp_per_turn = exp_per_fight / turns_per_fight
-
-    score = exp_per_turn * SESSION * p_survive_session
-
+    # turns an encounter costs: the Hunt, each fight, and the rests to heal
+    gain = max(1.0, RU.rest_gain(full.max_energy, full.level))
+    turns = 1.0 + fights + lost / gain
+    p_survive_session = (1.0 - p_death) ** SESSION
+    exp_per_turn = exp / turns
     deadly.sort(key=lambda t: -t[1])
-
-    return {
+    out = {
         "circle": circle,
         "distance": distance_for_circle(circle),
         "size": size,
-        "monsters": len(seen),
-        "avg_danger": avg_danger,
-        "avg_exp": avg_exp,
-        "exp_per_fight": exp_per_fight,
+        "monsters": monsters,
+        "avg_danger": p_death,
+        "p_death_per_encounter": p_death,
+        "p_flee": p_flee,
+        "avg_exp": exp,
+        "exp_per_fight": exp / max(1e-9, fights),
         "exp_per_turn": exp_per_turn,
-        "turns_per_fight": turns_per_fight,
-        "lethal_frac": lethal_frac,
+        "turns_per_fight": turns,
+        "lethal_frac": lethal_w,
         "p_survive_session": p_survive_session,
-        "score": score,
+        "score": exp_per_turn * SESSION * p_survive_session,
         "deadly": [n for n, _ in deadly[:3]],
         "zone": zone_name(circle),
     }
+    if len(_CACHE) > 400:
+        _CACHE.clear()
+    _CACHE[key] = out
+    return dict(out)
 
 
 def zone_name(c):
@@ -251,37 +309,16 @@ def recommend(player, here=None, max_circle=32, measured=False):
     Rank every circle for this player. Returns (best, all_rows).
     """
     rows = []
+    dead_run = 0
     for c in range(1, max_circle + 1):
+        if dead_run >= 2 and c <= 19:
+            continue        # two circles in a row you can't survive: deeper
+                            # normal circles only get worse (the marshes and
+                            # beyond have their own monsters, so check those)
         r = evaluate_circle(player, c)
         if r:
-            # analytic estimate is a rough prior; replace with measured survival
-            # for the circles that matter (cheap: only near the likely answer)
             rows.append(r)
-
-    if measured:
-        # The analytic p_survive_session is unreliable, so MEASURE it. Walk
-        # outward from circle 1 measuring real survival, and stop once a circle
-        # drops below ~15% (everything past it is worse). This anchors the
-        # recommendation in simulated reality instead of a bad formula.
-        cur_c = circle_of(*here) if here else 1
-        start = 1
-        stop_at = None
-        for r in rows:
-            c = r["circle"]
-            # always measure through at least the current circle + a few beyond
-            if c < start:
-                continue
-            sv = measure_survival(player, c, sessions=24)
-            r["p_survive_session"] = sv
-            r["measured"] = True
-            if sv < 0.15 and c > max(cur_c, 2):
-                stop_at = c
-                break
-        # circles we didn't measure and are past the cliff: mark unsafe
-        if stop_at is not None:
-            for r in rows:
-                if r["circle"] > stop_at:
-                    r["p_survive_session"] = 0.0
+            dead_run = dead_run + 1 if r["p_survive_session"] < 0.01 else 0
 
     if here:
         cur = circle_of(*here)
