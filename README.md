@@ -27,6 +27,10 @@ panel docked on the right. Close the window and everything shuts down.
   game for you: combat moves, the Spell → Magic Bolt → mana steps, and "More"
   prompts. It only types while the launcher window is in front, so alt-tabbing
   away pauses it. It's off by default and remembers your choice.
+- **Auto-rest:** with Auto-play on, after a fight it presses **Rest** on the main
+  menu until energy is full. If resting stops raising energy (poisoned, or energy
+  draining) it stops after 3 tries, or after 1 if Info → Stats showed poison, and
+  starts again when energy goes up or the next fight starts.
 - **Auto-reroll (new characters):** pick your class, and on the "keep these
   stats?" screen auto-play rerolls until it gets a roll in about the top 1-in-100
   for that class (ranges from phantasia5.com/stats), then presses Keep. The grid
