@@ -83,6 +83,8 @@ DEFAULTS = {
     "background_stats": True,
     # monsters auto-play always Evades, whatever the odds (name contains)
     "always_evade": ["Moron"],
+    # evade monsters whose experience isn't worth the age the fight costs
+    "skip_low_value": True,
     "record": True,               # record screens + inputs (recorder.py)
     "record_screenshots": False,  # also save a PNG of the game per input
     "geometry": "",
@@ -603,7 +605,8 @@ class Launcher:
                                          "target_rolls": self.cfg.get("reroll_target", 100),
                                          "weights": self.cfg.get("reroll_weights") or {},
                                          "require_max": self.cfg.get("reroll_require_max", ["speed"])},
-                                     always_evade=self.cfg.get("always_evade", ["Moron"]))
+                                     always_evade=self.cfg.get("always_evade", ["Moron"]),
+                                     skip_low_value=self.cfg.get("skip_low_value", True))
         self._paint_auto_btn()
         self._paint_rec_btn()
 

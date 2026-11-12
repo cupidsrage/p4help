@@ -106,6 +106,7 @@ LOCK = threading.Lock()
 # gets a fresh Tracker, but the overlay's RollJudge lives on and caches by id.
 _CHAR_IDS = itertools.count(1)
 RECORDER = None   # recorder.Recorder, set by enable_recording()
+SKIP_MIN_EVADE = 0.5   # only skip a monster if running works this often
 MIMIC_HITS = 3.0     # expected hits with none landed -> it's a Mimic (a real
                      # monster lands none only ~5% of the time)
 ZONE_MIN_INTERVAL_S = 300   # zone advice recalc (~5 s CPU) at most this often
@@ -395,6 +396,9 @@ class Tracker:
         cf = getattr(self, "cal_fight", None)
         if cf is not None and clicked:
             cf["clicked"].append(clicked)
+        if self.cur is not None and clicked and clicked.strip().lower() in (
+                "melee", "skirmish", "nick", "spell", "rest", "luckout", "evade"):
+            self.cur["acted"] = True
         # All or Nothing cast: it can only be tried once per fight, and the
         # server shows a failure as "You hit X for 0 damage!" (no "grows
         # stronger" message), so the tracker must remember the cast itself.
@@ -836,6 +840,39 @@ class Tracker:
                        speed=d["speed"], energy=d["energy"], shield=0.0,
                        experience=d["experience"], specials=("Mi",))
 
+    def worth_it(self, m, moves):
+        """Is this monster worth the age? A fight is one turn however long it
+        lasts, and that turn is already spent; killing it costs the rests to
+        heal what it takes. Running costs one turn (the move). So fight only
+        if its experience beats what those extra turns would earn here:
+            exp x win > zone exp/turn x (rests - 1)."""
+        out = {"skip": False}
+        cur = self.cur or {}
+        if cur.get("quest_target") or cur.get("mimic"):
+            return out
+        if (self.trove is not None and MDB.MONSTERS.get(m.name, (0,) * 6)[5]
+                == RU.MAP_TREASURE_TYPE and RU.map_eligible(self.p.level, self.gems)):
+            return out                       # might drop a trove map
+        c = self.circle()
+        row = next((r for r in (getattr(self, "_zone_rows", None) or [])
+                    if r["circle"] == c), None)
+        rate = row.get("exp_per_turn") if row else None
+        fight = next((x for x in moves if x["move"] != "evade"), None)
+        ev = next((x for x in moves if x["move"] == "evade"), None)
+        if not rate or not fight or not ev:
+            return out
+        gain = RU.rest_gain(self.p.max_energy, self.p.level, self.cls)
+        rests = fight["energy_lost"] / max(1.0, gain)
+        exp = m.experience * fight["win"]
+        cost = rate * (rests - 1.0)
+        out.update(exp=exp, rests=rests, rate=rate, flee=ev["flee"])
+        if cost > exp and ev["flee"] >= SKIP_MIN_EVADE:
+            out["skip"] = True
+            out["why"] = (f"NOT WORTH THE AGE: ~{exp:,.0f} exp for ~{rests:.1f} "
+                          f"rests; this circle averages {rate:,.0f} exp a turn. "
+                          f"Evade ({ev['flee']*100:.0f}%).")
+        return out
+
     def _mimic_check(self):
         """At each of your fight prompts: a Mimic never hits back. If this
         monster should have hit you about MIMIC_HITS times by now and hasn't
@@ -967,6 +1004,10 @@ class Tracker:
             "energy_lost": x["energy_lost"],
         } for x in moves]
         self.cur["why"] = explain(self.p, m, st, moves)
+        if "worth" not in self.cur:
+            self.cur["worth"] = self.worth_it(m, self.cur["moves"])
+            if self.cur["worth"].get("skip"):
+                self.cur["warnings"].insert(0, self.cur["worth"]["why"])
 
         # opening game plans (only worth computing once, at the start)
         if "plans" not in self.cur:

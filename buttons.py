@@ -125,7 +125,7 @@ MOVE_TO_BUTTON = {
 class ButtonOverlay:
     def __init__(self, parent=None, autopress=None, before_press=None,
                  on_autopress_change=None, reroll_opts=None,
-                 always_evade=None):
+                 always_evade=None, skip_low_value=True):
         """parent=None: standalone floating window.
 
         parent=<Frame>: render inside that frame (launcher.py docks it beside
@@ -172,6 +172,8 @@ class ButtonOverlay:
                              if str(n).strip()]
         self.always_evade += [n.lower() for n in MUST_EVADE
                               if n.lower() not in self.always_evade]
+        # evade monsters not worth the age (see app.Tracker.worth_it)
+        self.skip_low_value = bool(skip_low_value)
         # resting after fights
         self._rest_last_e = None     # best energy reached while resting
         self._rest_stalls = 0        # rests in a row that didn't raise energy
@@ -804,6 +806,10 @@ class ButtonOverlay:
 
         mv = self._safe_move(f, d.get("player") or {})
         forced = self._forced_evade(f.get("name"))
+        worth = f.get("worth") or {}
+        if (not forced and self.skip_low_value and worth.get("skip")
+                and not f.get("acted")):
+            forced = "not worth the age"
         if forced:
             ev = next((m for m in f["moves"] if m.get("move") == "evade"), {})
             mv = {"move": "evade", "arg": None, "win": ev.get("win", 0),
@@ -918,7 +924,10 @@ class ButtonOverlay:
             odds = f"{mv['win']*100:.0f}% win"
             if mv.get("flee", 0) > 0:
                 odds = f"{mv['flee']*100:.0f}% escape"
-            if mv.get("forced"):
+            if mv.get("forced") == "not worth the age":
+                odds = (f"not worth the age: ~{worth.get('exp', 0):,.0f} exp for "
+                        f"~{worth.get('rests', 0):.1f} rests \u00b7 " + odds)
+            elif mv.get("forced"):
                 odds = f"always evade \"{mv['forced']}\" \u00b7 " + odds
             elif mv.get("safety"):
                 odds = f"safety: {mv['safety']} \u00b7 " + odds
