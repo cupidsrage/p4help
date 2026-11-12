@@ -175,6 +175,7 @@ class Tracker:
         self._shop_key = None
         self._shop = None
         self.quicksilver = 0.0
+        self.force_field = 0.0
         self.blind = False
         self.holywater = 0.0
         self.location = ""
@@ -274,6 +275,11 @@ class Tracker:
             p.energy = v
             if len(lines) > 1:
                 p.max_energy = num(lines[1])
+            # third number: your force field (stats.c Do_energy)
+            self.force_field = num(lines[2]) if len(lines) > 2 else 0.0
+            if self.fs is not None and self.fs.force_field != self.force_field:
+                self.fs.force_field = self.force_field
+                self._advice_dirty = True
         elif hdr == STRENGTH:
             p.strength = v
         elif hdr == SPEED:
@@ -1038,6 +1044,7 @@ class Tracker:
         self.sync_player()
 
         # keep live player numbers in the fight state
+        st.force_field = getattr(self, "force_field", 0.0)
         st.p_energy = self.p.energy
         st.p_mana = self.p.mana
 
