@@ -20,6 +20,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 import json
 import threading
+import time
 import queue
 import urllib.request
 import urllib.error
@@ -27,6 +28,7 @@ import urllib.error
 POLL_URL = "http://127.0.0.1:8420/state"
 POLL_MS = 500      # network poll
 PAINT_MS = 120     # ui refresh
+MIN_REBUILD_S = 1.0  # rebuild the panel at most this often
 
 BG      = "#16130e"
 PANEL   = "#1e1a12"
@@ -212,6 +214,14 @@ class Overlay:
         if sig == getattr(self, "_sig", None):
             self.root.after(PAINT_MS, self._render)
             return
+        # A rebuild recreates ~30 widgets (~20 ms, more on Windows). In fast
+        # auto-play fights the picture changes several times a second, so cap
+        # rebuilds at one per MIN_REBUILD_S; the next one shows the latest.
+        now = time.monotonic()
+        if now - getattr(self, "_built_at", 0.0) < MIN_REBUILD_S:
+            self.root.after(PAINT_MS, self._render)
+            return
+        self._built_at = now
         self._sig = sig
 
         self._clear()
